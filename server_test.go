@@ -3,41 +3,30 @@ package main
 import (
 	"testing"
 	"net"
-	"os/exec"
+	//"os/exec"
 	"os"
-	"fmt"
+	///"fmt"
 	"time"
 	"bytes"
 	"strings"
+	"io/ioutil"
+	"log"
 )
 
 const testInterval = 10
 var testBuffer []byte = []byte("{\"proto\":\"Test\",\"op\":\"24201\",\"ip\":\"10.160.107.86\",\"cell_id\":21229824,\"mcc\":242,\"mnc\":1,\"ue_mode\":2,\"interval\":10}\n")
 const threadCount = 3
 
-var dcBuffer []byte = []byte("Error occured.\nConnection closed.\n")
+//var dcBuffer []byte = []byte("Error occured.\nConnection closed.\n")
 
 func TestMain(m *testing.M) {
 	err := os.Remove("./data.log")
-	if err != nil {
-		fmt.Printf("Failed to delete file")
-		return
-	}
+	if err != nil {}
 
-	cmd := exec.Command("./server.exe")
-
-	err = cmd.Start()
-	if err != nil {
-		fmt.Printf("Cannot start server")
-		return
-	}
+	log.SetOutput(ioutil.Discard)
+	go main()
 
 	code := m.Run()
-
-	if err := cmd.Process.Kill(); err != nil {
-		fmt.Printf("Failed to kill server process")
-		return
-	}
 
 	os.Exit(code)
 }
@@ -60,7 +49,6 @@ func TCPFunc(t *testing.T) {
 	defer conn.Close()
 	
 	if _, err = conn.Write(testBuffer); err != nil {
-		fmt.Printf("%s\n", testBuffer)
 		conn.Close()
 		t.Error("Failed to write")
 	}
@@ -118,7 +106,6 @@ func UDPFunc(t *testing.T) {
 	defer conn.Close()
 	
 	if _, err = conn.Write(testBuffer); err != nil {
-		fmt.Printf("%s\n", testBuffer)
 		conn.Close()
 		t.Error("Failed to write")
 	}
@@ -141,7 +128,6 @@ func UDPFunc(t *testing.T) {
 		conn.Close()
 		t.Error("Error reading connection")
 	} else if bytes.Compare(tempBuf[:n], dcBuffer) == 0 {
-		fmt.Printf(string(tempBuf[:n]))
 		conn.Close()
 		t.Error("Wrong format in packet")
 	}
@@ -149,7 +135,7 @@ func UDPFunc(t *testing.T) {
 }
 
 func TestOutput(t *testing.T) {
-	f, err := os.Open("data.log")
+	f, err := os.Open("./data.log")
 	if err != nil {
 		t.Fatal("Unable to open file")
 	}

@@ -1,10 +1,9 @@
 package main
 
 import (
-	"fmt"
+	"log"
 	"net"
 	"time"
-	"log"
 	"encoding/json"
 	"os"
 	"strconv"
@@ -43,7 +42,7 @@ func SaveFunc(){
 
 	for i := range saveChan {
 		if buffer, err := json.Marshal(i); err != nil {
-			fmt.Printf("JSON invalid. Cannot write to file, error:%d\n", err)
+			log.Printf("JSON invalid. Cannot write to file, error:%d\n", err)
 		} else if _, err := f.Write(append(buffer, '\n')); err != nil {
 			f.Close() // ignore error; Write error takes precedence
 			log.Fatal(err)
@@ -72,7 +71,7 @@ func HandleData(buffer []byte) ([]byte, error) {
 }
 
 func HandleUDP(pc net.PacketConn,addr net.Addr, buffer []byte){
-	fmt.Printf("UDP Packet received from %s\n", addr.String())
+	log.Printf("UDP Packet received from %s\n", addr.String())
 
 	retBuffer, err := HandleData(buffer)
 	if err != nil {
@@ -83,10 +82,10 @@ func HandleUDP(pc net.PacketConn,addr net.Addr, buffer []byte){
 
 	_, err = pc.WriteTo(retBuffer, addr)
 	if err != nil {
-		fmt.Printf("UDP write to %s failed, error: %s\n", addr.String(), err.Error())
+		log.Printf("UDP write to %s failed, error: %s\n", addr.String(), err.Error())
 		return
 	}
-	fmt.Printf("Packet sent to %s\n", addr.String())
+	log.Printf("Packet sent to %s\n", addr.String())
 
 }
 
@@ -95,7 +94,7 @@ func HandleTCP(conn net.Conn){
 	doneChan := make(chan bool)
 	first := true
 	for {
-		fmt.Printf("New TCP connection to %s\n",  conn.RemoteAddr().String())
+		log.Printf("New TCP connection to %s\n",  conn.RemoteAddr().String())
 
 		buffer := make([]byte, maxBufferSize)
 				
@@ -123,18 +122,18 @@ func HandleTCP(conn net.Conn){
 		
 		_, err = conn.Write(retBuffer)
 		if err != nil {
-			fmt.Printf("TCP write to %s failed, error: %s\n", conn.RemoteAddr().String(), err.Error())
+			log.Printf("TCP write to %s failed, error: %s\n", conn.RemoteAddr().String(), err.Error())
 			conn.Close()
 			return
 		}
-		fmt.Printf("Packet sent to %s\n", conn.RemoteAddr().String())
+		log.Printf("Packet sent to %s\n", conn.RemoteAddr().String())
 
 		timer := time.NewTimer(timeout * time.Second);
 		go func() {
-			fmt.Printf("Waiting...\n")
+			log.Printf("Waiting...\n")
 			select{
 				case <-timer.C:
-					fmt.Printf("Connection to %s terminated.\n", conn.RemoteAddr().String())
+					log.Printf("Connection to %s terminated.\n", conn.RemoteAddr().String())
 					conn.Close()
 				case <-doneChan:
 					timer.Stop()
