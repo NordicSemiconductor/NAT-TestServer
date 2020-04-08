@@ -3,9 +3,7 @@ package main
 import (
 	"testing"
 	"net"
-	//"os/exec"
 	"os"
-	///"fmt"
 	"time"
 	"bytes"
 	"strings"
@@ -17,14 +15,15 @@ const testInterval = 10
 var testBuffer []byte = []byte("{\"proto\":\"Test\",\"op\":\"24201\",\"ip\":\"10.160.107.86\",\"cell_id\":21229824,\"mcc\":242,\"mnc\":1,\"ue_mode\":2,\"interval\":10}\n")
 const threadCount = 3
 
-//var dcBuffer []byte = []byte("Error occured.\nConnection closed.\n")
-
 func TestMain(m *testing.M) {
 	err := os.Remove("./data.log")
 	if err != nil {}
 
 	log.SetOutput(ioutil.Discard)
 	go main()
+
+	// Make sure server has started before trying to run tests
+	time.Sleep(time.Duration(5)*time.Second)
 
 	code := m.Run()
 
