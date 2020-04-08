@@ -7,24 +7,18 @@ import (
 	"log"
 	"encoding/json"
 	"os"
+	"strconv"
 )
 
-const UDPport = ":3050"
-const TCPport = ":3051"
-const timeout = 10
-const maxBufferSize = 256
-var dcBuffer []byte = []byte("Error occured.\nConnection closed.\n")
-var tasks []SaveStruct
-
 type Packet struct{
-	Protocol string
-	Operator string
-	IP string
-	CellID string
-	MCC int
-	MNC int
-	UEMode int
-	Duration int
+	Protocol string `json:"proto"`
+	Operator string `json:"op"`
+	IP string `json:"ip"`
+	CellId int `json:"cell_id"`
+	MCC int `json:"mcc"`
+	MNC int `json:"mnc"`
+	UEMode int `json:"ue_mode"`
+	Interval int `json:"interval"`
 }
 
 type SaveStruct struct {
@@ -32,48 +26,61 @@ type SaveStruct struct {
 	Data Packet
 }
 
-func saveFunc(c chan SaveStruct){
-	f, err := os.OpenFile("data.json", os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
+const UDPport = ":3050"
+const TCPport = ":3051"
+const timeout = 10
+const maxBufferSize = 256
+var dcBuffer []byte = []byte("Error occured.\nConnection closed.\n")
+var saveChan chan SaveStruct
+
+func SaveFunc(){
+	f, err := os.OpenFile("data.log", os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
 	if err != nil {
 		log.Fatal(err)
 	}
 
 	defer f.Close()
 
-	for i := range c {
+	for i := range saveChan {
 		if buffer, err := json.Marshal(i); err != nil {
 			fmt.Printf("JSON invalid. Cannot write to file, error:%d\n", err)
-		} else if _, err := f.Write(buffer); err != nil {
+		} else if _, err := f.Write(append(buffer, '\n')); err != nil {
 			f.Close() // ignore error; Write error takes precedence
 			log.Fatal(err)
 		}
 	}
 }
 
-func handleUDP(pc net.PacketConn,addr net.Addr, buffer []byte, c chan SaveStruct){
-	var packet Packet	
-
+func HandleData(buffer []byte) ([]byte, error) {
 	startTime := time.Now().Format("2006-01-02 15:04:05")
 
+	var packet Packet
 	err := json.Unmarshal(buffer, &packet)
 	if err != nil {
-		_, err := pc.WriteTo(dcBuffer, addr)
-		if err != nil {}
-		fmt.Printf("temp\n");
-		return
+		return nil, err
 	}
-
-	fmt.Printf("UDP Packet received from %s with duration %d\n", addr.String(), packet.Duration)
 
 	saveStruct := SaveStruct{Received: startTime, Data: packet}
 
-	c <- saveStruct
+	saveChan <- saveStruct
 
-	time.Sleep(time.Duration(packet.Duration)*time.Second)
+	time.Sleep(time.Duration(packet.Interval)*time.Second)
 
 	endTime := time.Now().Format("2006-01-02 15:04:05")
-	retString := "Duration: " + string(2) + "\nReceived:" + startTime + "\nReturned: " + endTime +"\n";
-	retBuffer := []byte(retString)
+	retString := "Interval: " + strconv.Itoa(packet.Interval) + "\nReceived:" + startTime + "\nReturned: " + endTime +"\n";
+	return []byte(retString), nil
+}
+
+func HandleUDP(pc net.PacketConn,addr net.Addr, buffer []byte){
+	fmt.Printf("UDP Packet received from %s\n", addr.String())
+
+	retBuffer, err := HandleData(buffer)
+	if err != nil {
+		_, err = pc.WriteTo(dcBuffer, addr)
+		if err != nil {}
+		return
+	}
+
 	_, err = pc.WriteTo(retBuffer, addr)
 	if err != nil {
 		fmt.Printf("UDP write to %s failed, error: %s\n", addr.String(), err.Error())
@@ -84,48 +91,35 @@ func handleUDP(pc net.PacketConn,addr net.Addr, buffer []byte, c chan SaveStruct
 }
 
 
-func handleTCP(conn net.Conn, c chan SaveStruct){
-	donechan := make(chan bool)
+func HandleTCP(conn net.Conn){
+	doneChan := make(chan bool)
 	first := true
 	for {
+		fmt.Printf("New TCP connection to %s\n",  conn.RemoteAddr().String())
+
 		buffer := make([]byte, maxBufferSize)
 				
-		_, err := conn.Read(buffer)
+		n, err := conn.Read(buffer)
 		if err != nil {
 			_, err = conn.Write(dcBuffer)
 			if err != nil {}
 			conn.Close()
 			return
 		}
-
-		startTime := time.Now().Format("2006-01-02 15:04:05")
  
 		if !first {
-			donechan<-true
+			doneChan<-true
 		}	else {
 			first = false
 		}
 
-		var packet Packet
-		err = json.Unmarshal(buffer, &packet)
+		retBuffer, err := HandleData(buffer[:n-1])
 		if err != nil {
 			_, err = conn.Write(dcBuffer)
 			if err != nil {}
 			conn.Close()
 			return
 		}
-	
-		saveStruct := SaveStruct{Received: startTime, Data: packet}
-	
-		fmt.Printf("TCP Packet received from %s with duration %d\n", conn.RemoteAddr().String(), packet.Duration)
-	
-		c <- saveStruct
-
-		time.Sleep(time.Duration(packet.Duration)*time.Second)
-		
-		endTime := time.Now().Format("2006-01-02 15:04:05");
-		retString := "Duration: " + string(2) + "\nReceived:" + startTime + "\nReturned: " + endTime +"\n";
-		retBuffer := []byte(retString)
 		
 		_, err = conn.Write(retBuffer)
 		if err != nil {
@@ -140,9 +134,9 @@ func handleTCP(conn net.Conn, c chan SaveStruct){
 			fmt.Printf("Waiting...\n")
 			select{
 				case <-timer.C:
-					fmt.Printf("Connection to %s terminated after %d seconds.\n", conn.RemoteAddr().String(), packet.Duration)
+					fmt.Printf("Connection to %s terminated.\n", conn.RemoteAddr().String())
 					conn.Close()
-				case <-donechan:
+				case <-doneChan:
 					timer.Stop()
 					return
 			}
@@ -150,7 +144,7 @@ func handleTCP(conn net.Conn, c chan SaveStruct){
 	}
 }
 
-func acceptUDP(pc net.PacketConn, c chan SaveStruct){
+func AcceptUDP(pc net.PacketConn){
 	for {
 		buffer := make([]byte, maxBufferSize)
 
@@ -159,24 +153,24 @@ func acceptUDP(pc net.PacketConn, c chan SaveStruct){
 			continue
 		}
 
-		go handleUDP(pc, addr, buffer[:n], c)
+		go HandleUDP(pc, addr, buffer[:n-1])
 	}
 }
 
-func acceptTCP(l net.Listener, c chan SaveStruct){
+func AcceptTCP(l net.Listener){
 	for {
 		conn, err := l.Accept()
 		if err != nil {
 			continue
 		}
 		
-		go handleTCP(conn, c)
+		go HandleTCP(conn)
 	}
 }
 
 func main(){
 	done := make(chan bool)
-	saveChan := make(chan SaveStruct)
+	saveChan = make(chan SaveStruct)
 
 	pc, err := net.ListenPacket("udp", UDPport)
 	if err != nil {
@@ -191,10 +185,9 @@ func main(){
 	defer pc.Close()
 	defer l.Close()
 	
-	go acceptUDP(pc, saveChan)
-	go acceptTCP(l, saveChan)
-
-	go saveFunc(saveChan)
+	go AcceptUDP(pc)
+	go AcceptTCP(l)
+	go SaveFunc()
 
 	<-done
 }
