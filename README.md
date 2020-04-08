@@ -1,5 +1,7 @@
 # NAT-TestServer
 
+![Test](https://github.com/PascalPickel/NAT-TestServer/workflows/Test/badge.svg)
+
 ## Testing
 
 To test if the server is listening on local ports and saves the correct data, execute the command
