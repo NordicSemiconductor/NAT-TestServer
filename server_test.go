@@ -12,7 +12,8 @@ import (
 )
 
 const testInterval = 10
-var testBuffer []byte = []byte("{\"proto\":\"Test\",\"op\":\"24201\",\"ip\":\"10.160.107.86\",\"cell_id\":21229824,\"mcc\":242,\"mnc\":1,\"ue_mode\":2,\"interval\":10}\n")
+var testBuffer []byte = []byte("{\"op\":\"24201\",\"ip\":\"10.160.73.64\",\"cell_id\":21229824,\"ue_mode\":2,\"iccid\":\"8931089318104314834F\",\"interval\":10}\n")
+
 const threadCount = 3
 
 func TestMain(m *testing.M) {
@@ -69,9 +70,11 @@ func TCPFunc(t *testing.T) {
 	if err != nil {
 		conn.Close()
 		t.Error("Error reading connection")
+		return
 	} else if bytes.Compare(tempBuf[:n], dcBuffer) == 0 {
 		conn.Close()
 		t.Error("Wrong format in packet")
+		return
 	}
 	doneChan<-true
 }
@@ -126,9 +129,11 @@ func UDPFunc(t *testing.T) {
 	if err != nil {
 		conn.Close()
 		t.Error("Error reading connection")
+		return
 	} else if bytes.Compare(tempBuf[:n], dcBuffer) == 0 {
 		conn.Close()
 		t.Error("Wrong format in packet")
+		return
 	}
 	doneChan<-true
 }
@@ -147,7 +152,7 @@ func TestOutput(t *testing.T) {
 		t.Error("Could not read file")
 	}
 
-	if strings.Count(string(buffer), "\"proto\":\"Test\"") != 2*threadCount {
+	if strings.Count(string(buffer), "\"ip\":\"10.160.73.64\"") != 2*threadCount {
 		t.Error("Wrong data written")
 	}
 }

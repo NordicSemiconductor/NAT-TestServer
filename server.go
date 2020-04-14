@@ -10,18 +10,17 @@ import (
 )
 
 type Packet struct{
-	Protocol string `json:"proto"`
 	Operator string `json:"op"`
 	IP string `json:"ip"`
 	CellId int `json:"cell_id"`
-	MCC int `json:"mcc"`
-	MNC int `json:"mnc"`
 	UEMode int `json:"ue_mode"`
+	ICCID string `json:"iccid"`
 	Interval int `json:"interval"`
 }
 
 type SaveStruct struct {
 	Received string
+	Protocol string
 	Data Packet
 }
 
@@ -50,8 +49,8 @@ func SaveFunc(){
 	}
 }
 
-func HandleData(buffer []byte) ([]byte, error) {
-	startTime := time.Now().Format("2006-01-02 15:04:05")
+func HandleData(buffer []byte, protocol string) ([]byte, error) {
+	startTime := time.Now().Format("2006-01-02 15:04:05.000 MST")
 
 	var packet Packet
 	err := json.Unmarshal(buffer, &packet)
@@ -59,13 +58,13 @@ func HandleData(buffer []byte) ([]byte, error) {
 		return nil, err
 	}
 
-	saveStruct := SaveStruct{Received: startTime, Data: packet}
+	saveStruct := SaveStruct{Received: startTime, Protocol: protocol, Data: packet}
 
 	saveChan <- saveStruct
 
 	time.Sleep(time.Duration(packet.Interval)*time.Second)
 
-	endTime := time.Now().Format("2006-01-02 15:04:05")
+	endTime := time.Now().Format("2006-01-02 15:04:05.000 MST")
 	retString := "Interval: " + strconv.Itoa(packet.Interval) + "\nReceived:" + startTime + "\nReturned: " + endTime +"\n";
 	return []byte(retString), nil
 }
@@ -73,7 +72,7 @@ func HandleData(buffer []byte) ([]byte, error) {
 func HandleUDP(pc net.PacketConn,addr net.Addr, buffer []byte){
 	log.Printf("UDP Packet received from %s\n", addr.String())
 
-	retBuffer, err := HandleData(buffer)
+	retBuffer, err := HandleData(buffer, "UDP")
 	if err != nil {
 		_, err = pc.WriteTo(dcBuffer, addr)
 		if err != nil {}
@@ -94,10 +93,10 @@ func HandleTCP(conn net.Conn){
 	doneChan := make(chan bool)
 	first := true
 	for {
-		log.Printf("New TCP connection to %s\n",  conn.RemoteAddr().String())
-
 		buffer := make([]byte, maxBufferSize)
-				
+		
+		log.Printf("TCP packet received from %s\n", conn.RemoteAddr().String())
+
 		n, err := conn.Read(buffer)
 		if err != nil {
 			_, err = conn.Write(dcBuffer)
@@ -112,7 +111,7 @@ func HandleTCP(conn net.Conn){
 			first = false
 		}
 
-		retBuffer, err := HandleData(buffer[:n-1])
+		retBuffer, err := HandleData(buffer[:n-1], "TCP")
 		if err != nil {
 			_, err = conn.Write(dcBuffer)
 			if err != nil {}
