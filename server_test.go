@@ -13,7 +13,22 @@ import (
 
 const testInterval = 10
 var testBuffer []byte = []byte("{\"op\":\"24201\",\"ip\":\"10.160.73.64\",\"cell_id\":21229824,\"ue_mode\":2,\"iccid\":\"8931089318104314834F\",\"interval\":10}\n")
-
+var errorCases [][]byte = [][]byte{
+	[]byte("{\"op\":,\"ip\":\"10.160.73.64\",\"cell_id\":21229824,\"ue_mode\":2,\"iccid\":\"8931089318104314834F\",\"interval\":10}"),
+	[]byte("{\"op\":\"24201\",\"ip\":,\"cell_id\":21229824,\"ue_mode\":2,\"iccid\":\"8931089318104314834F\",\"interval\":10}"),
+	[]byte("{\"op\":\"24201\",\"ip\":\"10.160.73.64\",\"cell_id\":,\"ue_mode\":2,\"iccid\":\"8931089318104314834F\",\"interval\":10}"),
+	[]byte("{\"op\":\"24201\",\"ip\":\"10.160.73.64\",\"cell_id\":21229824,\"ue_mode\":,\"iccid\":\"8931089318104314834F\",\"interval\":10}"),
+	[]byte("{\"op\":\"24201\",\"ip\":\"10.160.73.64\",\"cell_id\":21229824,\"ue_mode\":2,\"iccid\":,\"interval\":10}"),
+	[]byte("{\"op\":\"24201\",\"ip\":\"10.160.73.64\",\"cell_id\":21229824,\"ue_mode\":2,\"iccid\":\"8931089318104314834F\",\"interval\":}"),
+	[]byte("{\"op\":\"24201\",\"ip\":\"10.160.73.64\",\"cell_id\":21229824,\"ue_mode\":2,\"iccid\":\"8931089318104314834F\",\"interval\":10,\"temp\":0}"),
+	[]byte("{\"op\":\"24201\",\"ip\":\"10.160.73.64\",\"cell_id\":21229824,\"ue_mode\":2,\"iccid\":\"8931089318104314834F\"}"),
+	[]byte("{\"op\":\"24201\",\"ip\":\"10.160.73.64\",\"cell_id\":21229824,\"ue_mode\":2,\"iccid\":\"\",\"interval\":10}"),
+	[]byte("{\"op\":\"24201\",\"ip\":\"10.160.73.64\",\"cell_id\":21229824,\"ue_mode\":2,\"iccid\":\"8931089318104314834F\",\"interval\":-1}"),
+	[]byte("{\"op\":\"24201\",\"ip\":\"256.256.256.256\",\"cell_id\":21229824,\"ue_mode\":2,\"iccid\":\"8931089318104314834F\",\"interval\":10}"),
+	[]byte("{\"op\":\"24201\",\"ip\":\"10-160-73-64\",\"cell_id\":21229824,\"ue_mode\":2,\"iccid\":\"8931089318104314834F\",\"interval\":10}"),
+	[]byte("{\"op\":\"24201\",\"ip\":\"10.160.73.64.10\",\"cell_id\":21229824,\"ue_mode\":2,\"iccid\":\"8931089318104314834F\",\"interval\":10}"),
+	[]byte("{\"op\":\"24201\",\"ip\":\"10.160.73.64\",\"cell_id\":21229824,\"ue_mode\":2,\"iccid\":\"2331089318104314834F\",\"interval\":10}"),
+}
 const threadCount = 3
 
 func TestMain(m *testing.M) {
@@ -136,6 +151,15 @@ func UDPFunc(t *testing.T) {
 		return
 	}
 	doneChan<-true
+}
+
+func TestHandleData(t *testing.T) {
+	for _,errorCase := range errorCases {
+		ret, err := HandleData(errorCase, "UDP")
+		if err == nil && strings.Compare(string(ret), string(dcBuffer)) != 0{
+			t.Errorf("Wrong format was accepted by server. Sent: %s\n", errorCase)
+		}
+	}
 }
 
 func TestOutput(t *testing.T) {

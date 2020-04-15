@@ -7,6 +7,10 @@ import (
 	"encoding/json"
 	"os"
 	"strconv"
+	"errors"
+	"github.com/xeipuuv/gojsonschema"
+	"path/filepath"
+	"strings"
 )
 
 type Packet struct{
@@ -30,6 +34,7 @@ const timeout = 10
 const maxBufferSize = 256
 var dcBuffer []byte = []byte("Error occured.\nConnection closed.\n")
 var saveChan chan SaveStruct
+var schemaLoader gojsonschema.JSONLoader
 
 func SaveFunc(){
 	f, err := os.OpenFile("data.log", os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
@@ -52,8 +57,16 @@ func SaveFunc(){
 func HandleData(buffer []byte, protocol string) ([]byte, error) {
 	startTime := time.Now().Format("2006-01-02 15:04:05.000 MST")
 
+	documentLoader := gojsonschema.NewStringLoader(string(buffer))
+	result, err := gojsonschema.Validate(schemaLoader, documentLoader)
+	if err != nil {
+		return nil, err
+	} else if !result.Valid() {
+		return nil, errors.New("Wrong format in packet")
+	}
+
 	var packet Packet
-	err := json.Unmarshal(buffer, &packet)
+	err = json.Unmarshal(buffer, &packet)
 	if err != nil {
 		return nil, err
 	}
@@ -95,8 +108,6 @@ func HandleTCP(conn net.Conn){
 	for {
 		buffer := make([]byte, maxBufferSize)
 		
-		log.Printf("TCP packet received from %s\n", conn.RemoteAddr().String())
-
 		n, err := conn.Read(buffer)
 		if err != nil {
 			_, err = conn.Write(dcBuffer)
@@ -169,6 +180,10 @@ func AcceptTCP(l net.Listener){
 func main(){
 	done := make(chan bool)
 	saveChan = make(chan SaveStruct)
+
+	absPath, _ := filepath.Abs("./schema.json")
+	absPath = "file:///" + strings.ReplaceAll(absPath, "\\", "/")
+	schemaLoader = gojsonschema.NewReferenceLoader(absPath)
 
 	pc, err := net.ListenPacket("udp", UDPport)
 	if err != nil {

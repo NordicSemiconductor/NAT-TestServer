@@ -1,0 +1,30 @@
+{
+    "type": "object",
+    "properties": {
+        "op": {
+            "type": "string"
+        },
+        "ip": {
+            "type": "string",
+            "format": "ipv4"
+        },
+        "cell_id": {
+            "type": "integer",
+            "minimum": 1
+        },
+        "ue_mode": {
+            "type": "integer",
+            "minimum": 0
+        },
+        "iccid": {
+            "type": "string",
+            "pattern": "^89[0-9]{17}([0-9]|F)$"
+        },
+        "interval": {
+            "type": "integer",
+            "minimum": 1
+        }
+    },
+    "required": ["op", "ip", "cell_id", "ue_mode", "iccid", "interval"],
+    "additionalProperties": false
+}
