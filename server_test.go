@@ -9,10 +9,14 @@ import (
 	"strings"
 	"io/ioutil"
 	"log"
+	"github.com/aws/aws-sdk-go/aws"
+	"github.com/aws/aws-sdk-go/service/s3"
+	"github.com/aws/aws-sdk-go/aws/session"
 )
 
 const testInterval = 10
-var testBuffer []byte = []byte("{\"op\":\"24201\",\"ip\":\"10.160.73.64\",\"cell_id\":21229824,\"ue_mode\":2,\"iccid\":\"8931089318104314834F\",\"interval\":10}\n")
+const testIP = "0.0.0.0"
+var testBuffer []byte = []byte("{\"op\":\"24201\",\"ip\":\"" + testIP + "\",\"cell_id\":21229824,\"ue_mode\":2,\"iccid\":\"8931089318104314834F\",\"interval\":10}\n")
 var errorCases [][]byte = [][]byte{
 	[]byte("{\"op\":,\"ip\":\"10.160.73.64\",\"cell_id\":21229824,\"ue_mode\":2,\"iccid\":\"8931089318104314834F\",\"interval\":10}"),
 	[]byte("{\"op\":\"24201\",\"ip\":,\"cell_id\":21229824,\"ue_mode\":2,\"iccid\":\"8931089318104314834F\",\"interval\":10}"),
@@ -28,12 +32,14 @@ var errorCases [][]byte = [][]byte{
 	[]byte("{\"op\":\"24201\",\"ip\":\"10-160-73-64\",\"cell_id\":21229824,\"ue_mode\":2,\"iccid\":\"8931089318104314834F\",\"interval\":10}"),
 	[]byte("{\"op\":\"24201\",\"ip\":\"10.160.73.64.10\",\"cell_id\":21229824,\"ue_mode\":2,\"iccid\":\"8931089318104314834F\",\"interval\":10}"),
 	[]byte("{\"op\":\"24201\",\"ip\":\"10.160.73.64\",\"cell_id\":21229824,\"ue_mode\":2,\"iccid\":\"2331089318104314834F\",\"interval\":10}"),
+	[]byte("{\"op\":\"100000\",\"ip\":\"10.160.73.64\",\"cell_id\":21229824,\"ue_mode\":2,\"iccid\":\"8931089318104314834F\",\"interval\":10}"),
+	[]byte("{\"op\":\"24201\",\"ip\":\"10.160.73.64\",\"cell_id\":21229824,\"ue_mode\":3,\"iccid\":\"8931089318104314834F\",\"interval\":10}"),
 }
+var startTime time.Time
 const threadCount = 3
 
 func TestMain(m *testing.M) {
-	err := os.Remove("./data.log")
-	if err != nil {}
+	startTime = time.Now()
 
 	log.SetOutput(ioutil.Discard)
 	go main()
@@ -162,21 +168,34 @@ func TestHandleData(t *testing.T) {
 	}
 }
 
-func TestOutput(t *testing.T) {
-	f, err := os.Open("./data.log")
+func TestOutput(t *testing.T) {	
+	endTime := time.Now()
+
+	sess, err := session.NewSession(&aws.Config{
+		Region: aws.String(os.Getenv("AWS_REGION"))},
+	)
 	if err != nil {
-		t.Fatal("Unable to open file")
+		log.Fatal("Error creating session ", err)
+	} 
+	svc := s3.New(sess, &aws.Config{
+		Region: aws.String(os.Getenv("AWS_REGION"))},
+	)
+
+    resp, err := svc.ListObjectsV2(&s3.ListObjectsV2Input{Bucket: aws.String(os.Getenv("AWS_BUCKET"))})
+    if err != nil {
+        t.Error("Unable to get bucket items", err)
+    }
+
+	var i int
+    for _, item := range resp.Contents {
+		if strings.Contains(*item.Key, testIP) {
+			tempTime := *item.LastModified
+			if tempTime.After(startTime) && tempTime.Before(endTime)  {
+				i++
+			}
+		}
 	}
-
-	defer f.Close()
-
-	buffer := make([]byte, 1024)
-	_, err = f.Read(buffer) 
-	if err != nil {
-		t.Error("Could not read file")
-	}
-
-	if strings.Count(string(buffer), "\"ip\":\"10.160.73.64\"") != 2*threadCount {
-		t.Error("Wrong data written")
+	if i != threadCount*2 {
+		t.Errorf("Expected number of files: %d, Found:%d\n", threadCount*2, i)
 	}
 }

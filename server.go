@@ -5,12 +5,20 @@ import (
 	"net"
 	"time"
 	"encoding/json"
-	"os"
 	"strconv"
 	"errors"
 	"github.com/xeipuuv/gojsonschema"
 	"path/filepath"
 	"strings"
+	"fmt"
+	"github.com/aws/aws-sdk-go/aws"
+	"github.com/aws/aws-sdk-go/aws/awserr"
+    "github.com/aws/aws-sdk-go/aws/session"
+	"github.com/aws/aws-sdk-go/service/s3"
+	"github.com/aws/aws-sdk-go/aws/request"
+	"github.com/google/uuid"
+	"context"
+	"os"
 )
 
 type Packet struct{
@@ -32,30 +40,62 @@ const UDPport = ":3050"
 const TCPport = ":3051"
 const timeout = 10
 const maxBufferSize = 256
+const schemaFile = "schema.json"
 var dcBuffer []byte = []byte("Error occured.\nConnection closed.\n")
 var saveChan chan SaveStruct
 var schemaLoader gojsonschema.JSONLoader
 
-func SaveFunc(){
-	f, err := os.OpenFile("data.log", os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
+func SaveRoutine(){
+	awsBucket := os.Getenv("AWS_BUCKET")
+	sess, err := session.NewSession(&aws.Config{
+		Region: aws.String(os.Getenv("AWS_REGION"))},
+	)
 	if err != nil {
-		log.Fatal(err)
-	}
-
-	defer f.Close()
+		log.Fatal("Error creating session ", err)
+	} 
+	svc := s3.New(sess, &aws.Config{
+		Region: aws.String(os.Getenv("AWS_REGION"))},
+	)
 
 	for i := range saveChan {
-		if buffer, err := json.Marshal(i); err != nil {
+		buffer, err := json.Marshal(i)
+		if  err != nil {
 			log.Printf("JSON invalid. Cannot write to file, error:%d\n", err)
-		} else if _, err := f.Write(append(buffer, '\n')); err != nil {
-			f.Close() // ignore error; Write error takes precedence
-			log.Fatal(err)
 		}
+
+		newUUID, err := uuid.NewRandom()
+		if err != nil {	}
+		key := fmt.Sprintf("%s-%s-%s.json", time.Now().Format("2006/01/02/150405"), i.Data.IP, newUUID)
+		
+		ctx := context.Background()
+		var cancelFn func()
+		if timeout > 0 {
+			ctx, cancelFn = context.WithTimeout(ctx, timeout * time.Second)
+		}
+
+		go func() {
+			_, err = svc.PutObjectWithContext(ctx, &s3.PutObjectInput{
+				Bucket: aws.String(awsBucket),
+				Key:    aws.String(key),
+				Body:   strings.NewReader(string(buffer)),
+			})
+			if err != nil {
+				if aerr, ok := err.(awserr.Error); ok && aerr.Code() == request.CanceledErrorCode {
+					log.Printf("Upload canceled due to timeout, %s\n", err.Error())
+				} else {
+					log.Printf("Failed to upload object, %s\n", err.Error())
+				}
+			}
+		
+			if cancelFn != nil {
+				cancelFn()
+		}
+		}()
 	}
 }
 
 func HandleData(buffer []byte, protocol string) ([]byte, error) {
-	startTime := time.Now().Format("2006-01-02 15:04:05.000 MST")
+	startTime := time.Now().Format("2006-01-02T15:04:05.00-0700")
 
 	documentLoader := gojsonschema.NewStringLoader(string(buffer))
 	result, err := gojsonschema.Validate(schemaLoader, documentLoader)
@@ -77,7 +117,7 @@ func HandleData(buffer []byte, protocol string) ([]byte, error) {
 
 	time.Sleep(time.Duration(packet.Interval)*time.Second)
 
-	endTime := time.Now().Format("2006-01-02 15:04:05.000 MST")
+	endTime := time.Now().Format("2006-01-02T15:04:05.00-0700")
 	retString := "Interval: " + strconv.Itoa(packet.Interval) + "\nReceived:" + startTime + "\nReturned: " + endTime +"\n";
 	return []byte(retString), nil
 }
@@ -181,7 +221,7 @@ func main(){
 	done := make(chan bool)
 	saveChan = make(chan SaveStruct)
 
-	absPath, _ := filepath.Abs("./schema.json")
+	absPath, _ := filepath.Abs(schemaFile)
 	absPath = "file:///" + strings.ReplaceAll(absPath, "\\", "/")
 	schemaLoader = gojsonschema.NewReferenceLoader(absPath)
 
@@ -200,7 +240,7 @@ func main(){
 	
 	go AcceptUDP(pc)
 	go AcceptTCP(l)
-	go SaveFunc()
+	go SaveRoutine()
 
 	<-done
 }
