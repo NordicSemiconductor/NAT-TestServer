@@ -33,6 +33,7 @@ type Packet struct{
 type SaveStruct struct {
 	Received string
 	Protocol string
+	IP string
 	Data Packet
 }
 
@@ -65,7 +66,7 @@ func SaveRoutine(){
 
 		newUUID, err := uuid.NewRandom()
 		if err != nil {	}
-		key := fmt.Sprintf("%s-%s-%s.json", time.Now().Format("2006/01/02/150405"), i.Data.IP, newUUID)
+		key := fmt.Sprintf("%s-%s-%s.json", i.IP, time.Now().Format("2006/01/02/150405"), newUUID)
 		
 		ctx := context.Background()
 		var cancelFn func()
@@ -94,7 +95,7 @@ func SaveRoutine(){
 	}
 }
 
-func HandleData(buffer []byte, protocol string) ([]byte, error) {
+func HandleData(buffer []byte, protocol string, addr string) ([]byte, error) {
 	startTime := time.Now().Format("2006-01-02T15:04:05.00-0700")
 
 	documentLoader := gojsonschema.NewStringLoader(string(buffer))
@@ -111,7 +112,7 @@ func HandleData(buffer []byte, protocol string) ([]byte, error) {
 		return nil, err
 	}
 
-	saveStruct := SaveStruct{Received: startTime, Protocol: protocol, Data: packet}
+	saveStruct := SaveStruct{Received: startTime, Protocol: protocol, IP: addr, Data: packet}
 
 	saveChan <- saveStruct
 
@@ -125,7 +126,7 @@ func HandleData(buffer []byte, protocol string) ([]byte, error) {
 func HandleUDP(pc net.PacketConn,addr net.Addr, buffer []byte){
 	log.Printf("UDP Packet received from %s\n", addr.String())
 
-	retBuffer, err := HandleData(buffer, "UDP")
+	retBuffer, err := HandleData(buffer, "UDP", addr.String())
 	if err != nil {
 		_, err = pc.WriteTo(dcBuffer, addr)
 		if err != nil {}
@@ -162,7 +163,7 @@ func HandleTCP(conn net.Conn){
 			first = false
 		}
 
-		retBuffer, err := HandleData(buffer[:n-1], "TCP")
+		retBuffer, err := HandleData(buffer[:n-1], "TCP", conn.RemoteAddr().String())
 		if err != nil {
 			_, err = conn.Write(dcBuffer)
 			if err != nil {}
