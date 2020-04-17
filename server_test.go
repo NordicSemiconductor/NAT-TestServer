@@ -162,7 +162,7 @@ func UDPFunc(t *testing.T) {
 
 func TestHandleData(t *testing.T) {
 	for _,errorCase := range errorCases {
-		ret, err := HandleData(errorCase, "UDP", testIP)
+		ret, _, err := HandleData(errorCase, "UDP", testIP)
 		if err == nil && strings.Compare(string(ret), string(dcBuffer)) != 0{
 			t.Errorf("Wrong format was accepted by server. Sent: %s\n", errorCase)
 		}

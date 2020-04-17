@@ -34,6 +34,7 @@ type SaveStruct struct {
 	Received string
 	Protocol string
 	IP string
+	Timeout bool
 	Data Packet
 }
 
@@ -42,6 +43,7 @@ const TCPport = ":3051"
 const timeout = 10
 const maxBufferSize = 256
 const schemaFile = "schema.json"
+const timeFormat = "2006-01-02T15:04:05.00-0700"
 var dcBuffer []byte = []byte("Error occured.\nConnection closed.\n")
 var saveChan chan SaveStruct
 var schemaLoader gojsonschema.JSONLoader
@@ -65,8 +67,11 @@ func SaveRoutine(){
 		}
 
 		newUUID, err := uuid.NewRandom()
-		if err != nil {	}
-		key := fmt.Sprintf("%s/%s-%s-%s.json", time.Now().Format("2006/01/02"), i.IP, time.Now().Format("150405"), newUUID)
+		if err != nil {}
+
+		received, err := time.Parse(i.Received, timeFormat)
+		if err != nil {}
+		key := fmt.Sprintf("%s/%s-%s-%s.json", received.Format("2006/01/02"), i.IP, received.Format("150405"), newUUID)
 		
 		ctx := context.Background()
 		var cancelFn func()
@@ -95,38 +100,38 @@ func SaveRoutine(){
 	}
 }
 
-func HandleData(buffer []byte, protocol string, addr string) ([]byte, error) {
-	startTime := time.Now().Format("2006-01-02T15:04:05.00-0700")
+func HandleData(buffer []byte, protocol string, addr string) ([]byte, SaveStruct, error) {
+	startTime := time.Now()
 
 	documentLoader := gojsonschema.NewStringLoader(string(buffer))
 	result, err := gojsonschema.Validate(schemaLoader, documentLoader)
 	if err != nil {
-		return nil, err
+		return nil, SaveStruct{}, err
 	} else if !result.Valid() {
-		return nil, errors.New("Wrong format in packet")
+		return nil, SaveStruct{}, errors.New("Wrong format in packet")
 	}
 
 	var packet Packet
 	err = json.Unmarshal(buffer, &packet)
 	if err != nil {
-		return nil, err
+		return nil, SaveStruct{}, err
 	}
 
-	saveStruct := SaveStruct{Received: startTime, Protocol: protocol, IP: addr, Data: packet}
+	saveStruct := SaveStruct{Received: startTime.Format(timeFormat), Protocol: protocol, IP: addr, Timeout: false, Data: packet}
 
 	saveChan <- saveStruct
 
 	time.Sleep(time.Duration(packet.Interval)*time.Second)
 
-	endTime := time.Now().Format("2006-01-02T15:04:05.00-0700")
-	retString := "Interval: " + strconv.Itoa(packet.Interval) + "\nReceived:" + startTime + "\nReturned: " + endTime +"\n";
-	return []byte(retString), nil
+	endTime := time.Now().Format(timeFormat)
+	retString := "Interval: " + strconv.Itoa(packet.Interval) + "\nReceived:" + startTime.Format(timeFormat) + "\nReturned: " + endTime +"\n";
+	return []byte(retString), saveStruct, nil
 }
 
 func HandleUDP(pc net.PacketConn,addr net.Addr, buffer []byte){
 	log.Printf("UDP Packet received from %s\n", addr.String())
 
-	retBuffer, err := HandleData(buffer, "UDP", addr.String())
+	retBuffer, saveStruct, err := HandleData(buffer, "UDP", addr.String())
 	if err != nil {
 		_, err = pc.WriteTo(dcBuffer, addr)
 		if err != nil {}
@@ -136,10 +141,11 @@ func HandleUDP(pc net.PacketConn,addr net.Addr, buffer []byte){
 	_, err = pc.WriteTo(retBuffer, addr)
 	if err != nil {
 		log.Printf("UDP write to %s failed, error: %s\n", addr.String(), err.Error())
+		saveStruct.Timeout = true
+		saveChan <- saveStruct
 		return
 	}
 	log.Printf("Packet sent to %s\n", addr.String())
-
 }
 
 
@@ -163,7 +169,7 @@ func HandleTCP(conn net.Conn){
 			first = false
 		}
 
-		retBuffer, err := HandleData(buffer[:n-1], "TCP", conn.RemoteAddr().String())
+		retBuffer, saveStruct, err := HandleData(buffer[:n-1], "TCP", conn.RemoteAddr().String())
 		if err != nil {
 			_, err = conn.Write(dcBuffer)
 			if err != nil {}
@@ -174,6 +180,8 @@ func HandleTCP(conn net.Conn){
 		_, err = conn.Write(retBuffer)
 		if err != nil {
 			log.Printf("TCP write to %s failed, error: %s\n", conn.RemoteAddr().String(), err.Error())
+			saveStruct.Timeout = true
+			saveChan <- saveStruct
 			conn.Close()
 			return
 		}
