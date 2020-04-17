@@ -12,6 +12,7 @@ import (
 	"github.com/aws/aws-sdk-go/aws"
 	"github.com/aws/aws-sdk-go/service/s3"
 	"github.com/aws/aws-sdk-go/aws/session"
+	"encoding/json"
 )
 
 const testInterval = 10
@@ -190,7 +191,22 @@ func TestOutput(t *testing.T) {
     for _, item := range resp.Contents {
 		tempTime := *item.LastModified
 		if tempTime.After(startTime) && tempTime.Before(endTime)  {
-			i++
+			obj, err := svc.GetObject(&s3.GetObjectInput{Bucket: aws.String(os.Getenv("AWS_BUCKET")), Key: aws.String(*item.Key)})
+			if err != nil {
+				t.Error("Unable to read bucket item", err)
+			}
+			body, err := ioutil.ReadAll(obj.Body)
+			if err != nil {
+				t.Error("Failed to read body of file")
+			}
+
+			var data SaveStruct
+			err = json.Unmarshal(body, &data)
+			if err != nil {
+				t.Error("Failed to read json data")
+			} else if data.Data.IP == testIP {
+				i++	
+			}
 		}
 	}
 	if i != threadCount*2 {
