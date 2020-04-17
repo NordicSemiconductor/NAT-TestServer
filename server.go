@@ -66,7 +66,7 @@ func SaveRoutine(){
 
 		newUUID, err := uuid.NewRandom()
 		if err != nil {	}
-		key := fmt.Sprintf("%s-%s-%s-%s.json", time.Now().Format("2006/01/02"), i.IP, time.Now().Format("150405"), newUUID)
+		key := fmt.Sprintf("%s/%s-%s-%s.json", time.Now().Format("2006/01/02"), i.IP, time.Now().Format("150405"), newUUID)
 		
 		ctx := context.Background()
 		var cancelFn func()
