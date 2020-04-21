@@ -200,7 +200,7 @@ func TestOutput(t *testing.T) {
 				t.Error("Failed to read body of file")
 			}
 
-			var data SaveStruct
+			var data SaveData
 			err = json.Unmarshal(body, &data)
 			if err != nil {
 				t.Error("Failed to read json data")

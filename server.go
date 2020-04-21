@@ -30,7 +30,7 @@ type Packet struct{
 	Interval int `json:"interval"`
 }
 
-type SaveStruct struct {
+type SaveData struct {
 	Received string
 	Protocol string
 	IP string
@@ -38,14 +38,19 @@ type SaveStruct struct {
 	Data Packet
 }
 
+type SaveRoutineStruct struct {
+	Timestamp time.Time 
+	Data SaveData
+}
+
 const UDPport = ":3050"
 const TCPport = ":3051"
-const timeout = 10
+const newPacketTimeout = 10
 const maxBufferSize = 256
 const schemaFile = "schema.json"
 const timeFormat = "2006-01-02T15:04:05.00-0700"
 var dcBuffer []byte = []byte("Error occured.\nConnection closed.\n")
-var saveChan chan SaveStruct
+var saveChan chan SaveRoutineStruct
 var schemaLoader gojsonschema.JSONLoader
 
 func SaveRoutine(){
@@ -61,7 +66,7 @@ func SaveRoutine(){
 	)
 
 	for i := range saveChan {
-		buffer, err := json.Marshal(i)
+		buffer, err := json.Marshal(i.Data)
 		if  err != nil {
 			log.Printf("JSON invalid. Cannot write to file, error:%d\n", err)
 		}
@@ -69,14 +74,12 @@ func SaveRoutine(){
 		newUUID, err := uuid.NewRandom()
 		if err != nil {}
 
-		received, err := time.Parse(i.Received, timeFormat)
-		if err != nil {}
-		key := fmt.Sprintf("%s/%s-%s-%s.json", received.Format("2006/01/02"), i.IP, received.Format("150405"), newUUID)
+		key := fmt.Sprintf("%s/%s-%s-%s.json", i.Timestamp.Format("2006/01/02"), i.Data.IP, i.Timestamp.Format("150405"), newUUID)
 		
 		ctx := context.Background()
 		var cancelFn func()
-		if timeout > 0 {
-			ctx, cancelFn = context.WithTimeout(ctx, timeout * time.Second)
+		if newPacketTimeout > 0 {
+			ctx, cancelFn = context.WithTimeout(ctx, newPacketTimeout * time.Second)
 		}
 
 		go func() {
@@ -95,63 +98,60 @@ func SaveRoutine(){
 		
 			if cancelFn != nil {
 				cancelFn()
-		}
+			}
 		}()
 	}
 }
 
-func HandleData(buffer []byte, protocol string, addr string) ([]byte, SaveStruct, error) {
+func HandleData(buffer []byte, protocol string, addr string) ([]byte, SaveRoutineStruct, error) {
 	startTime := time.Now()
 
 	documentLoader := gojsonschema.NewStringLoader(string(buffer))
 	result, err := gojsonschema.Validate(schemaLoader, documentLoader)
 	if err != nil {
-		return nil, SaveStruct{}, err
+		return nil, SaveRoutineStruct{}, err
 	} else if !result.Valid() {
-		return nil, SaveStruct{}, errors.New("Wrong format in packet")
+		return nil, SaveRoutineStruct{}, errors.New("Wrong format in packet")
 	}
 
 	var packet Packet
 	err = json.Unmarshal(buffer, &packet)
 	if err != nil {
-		return nil, SaveStruct{}, err
+		return nil, SaveRoutineStruct{}, err
 	}
 
-	saveStruct := SaveStruct{Received: startTime.Format(timeFormat), Protocol: protocol, IP: addr, Timeout: false, Data: packet}
-
-	saveChan <- saveStruct
+	saveData := SaveRoutineStruct{Timestamp: startTime, Data: SaveData{Received: startTime.Format(timeFormat), Protocol: protocol, IP: addr, Timeout: false, Data: packet}}
+	saveChan <- saveData
 
 	time.Sleep(time.Duration(packet.Interval)*time.Second)
 
 	endTime := time.Now().Format(timeFormat)
 	retString := "Interval: " + strconv.Itoa(packet.Interval) + "\nReceived:" + startTime.Format(timeFormat) + "\nReturned: " + endTime +"\n";
-	return []byte(retString), saveStruct, nil
+	return []byte(retString), saveData, nil
 }
 
 func HandleUDP(pc net.PacketConn,addr net.Addr, buffer []byte){
-	log.Printf("UDP Packet received from %s\n", addr.String())
-
-	retBuffer, saveStruct, err := HandleData(buffer, "UDP", addr.String())
+	retBuffer, saveData, err := HandleData(buffer, "UDP", addr.String())
 	if err != nil {
+		log.Printf("Invalid UDP Packet received from %s. Connection terminated.\n", addr.String())
 		_, err = pc.WriteTo(dcBuffer, addr)
 		if err != nil {}
 		return
 	}
 
+	log.Printf("UDP Packet received from %s\n", addr.String())
+
 	_, err = pc.WriteTo(retBuffer, addr)
 	if err != nil {
 		log.Printf("UDP write to %s failed, error: %s\n", addr.String(), err.Error())
-		saveStruct.Timeout = true
-		saveChan <- saveStruct
+		saveData.Data.Timeout = true
+		saveChan <- saveData
 		return
 	}
 	log.Printf("Packet sent to %s\n", addr.String())
 }
 
-
 func HandleTCP(conn net.Conn){
-	doneChan := make(chan bool)
-	first := true
 	for {
 		buffer := make([]byte, maxBufferSize)
 		
@@ -162,43 +162,27 @@ func HandleTCP(conn net.Conn){
 			conn.Close()
 			return
 		}
- 
-		if !first {
-			doneChan<-true
-		}	else {
-			first = false
-		}
 
-		retBuffer, saveStruct, err := HandleData(buffer[:n-1], "TCP", conn.RemoteAddr().String())
+		retBuffer, saveData, err := HandleData(buffer[:n-1], "TCP", conn.RemoteAddr().String())
 		if err != nil {
+			log.Printf("Invalid TCP Packet received from %s. Connection terminated.\n", conn.RemoteAddr().String())
 			_, err = conn.Write(dcBuffer)
 			if err != nil {}
 			conn.Close()
 			return
 		}
+
+		log.Printf("TCP Packet received from %s\n", conn.RemoteAddr().String())
 		
 		_, err = conn.Write(retBuffer)
 		if err != nil {
-			log.Printf("TCP write to %s failed, error: %s\n", conn.RemoteAddr().String(), err.Error())
-			saveStruct.Timeout = true
-			saveChan <- saveStruct
+			log.Printf("TCP write to %s failed. Connection terminated\n", conn.RemoteAddr().String())
+			saveData.Data.Timeout = true
+			saveChan <- saveData
 			conn.Close()
 			return
 		}
 		log.Printf("Packet sent to %s\n", conn.RemoteAddr().String())
-
-		timer := time.NewTimer(timeout * time.Second);
-		go func() {
-			log.Printf("Waiting...\n")
-			select{
-				case <-timer.C:
-					log.Printf("Connection to %s terminated.\n", conn.RemoteAddr().String())
-					conn.Close()
-				case <-doneChan:
-					timer.Stop()
-					return
-			}
-		}()
 	}
 }
 
@@ -228,7 +212,7 @@ func AcceptTCP(l net.Listener){
 
 func main(){
 	done := make(chan bool)
-	saveChan = make(chan SaveStruct)
+	saveChan = make(chan SaveRoutineStruct)
 
 	absPath, _ := filepath.Abs(schemaFile)
 	absPath = "file:///" + strings.ReplaceAll(absPath, "\\", "/")
