@@ -3,14 +3,15 @@
     "properties": {
         "op": {
             "type": "string",
-            "maxLength": 5
+            "minLength": 5,
+            "maxLength": 6
         },
         "ip": {
-            "type": "string",
-            "oneOf": [
-                { "format": "ipv4" },
-                { "format": "ipv6" }
-            ]
+            "type": "array",
+            "minItems": 1,
+            "items": {
+                "type": "string"
+            }
         },
         "cell_id": {
             "type": "integer",
