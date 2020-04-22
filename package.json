@@ -1,0 +1,28 @@
+{
+  "name": "@nordicsemiconductor/nat-testserver",
+  "version": "0.0.0-development",
+  "description": "Receives NAT test messages from the NAT-TestFirmware and logs them and timeout occurances to S3",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/NordicSemiconductor/NAT-TestServer.git"
+  },
+  "keywords": [
+    "NAT-Test",
+    "Nordic Semiconductor"
+  ],
+  "author": "Nordic Semiconductor ASA | nordicsemi.no",
+  "license": "BSD-3-Clause",
+  "bugs": {
+    "url": "https://github.com/NordicSemiconductor/NAT-TestServer/issues"
+  },
+  "homepage": "https://github.com/NordicSemiconductor/NAT-TestServer#readme",
+  "devDependencies": {
+    "@aws-cdk/aws-iam": "^1.34.1",
+    "@aws-cdk/aws-s3": "^1.34.1",
+    "@aws-cdk/core": "^1.34.1",
+    "@bifravst/code-style": "^7.1.4",
+    "@types/node": "^13.13.2",
+    "aws-cdk": "^1.34.1",
+    "typescript": "^3.8.3"
+  }
+}
