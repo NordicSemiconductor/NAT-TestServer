@@ -17,8 +17,12 @@ import (
 )
 
 const testInterval = 10
-const testIP = "0.0.0.0"
-var testBuffer []byte = []byte("{\"op\":\"24201\",\"ip\":\"" + testIP + "\",\"cell_id\":21229824,\"ue_mode\":2,\"iccid\":\"8931089318104314834F\",\"interval\":"+ strconv.Itoa(testInterval) +"}\n")
+const testIPv4 = "0.0.0.0"
+const testIPv6 = "0000:0000:0000:0000:0000:0000:0000:0000"
+var testCases [2][]byte = [2][]byte{
+	[]byte("{\"op\":\"24201\",\"ip\":\"" + testIPv4 + "\",\"cell_id\":21229824,\"ue_mode\":2,\"iccid\":\"8931089318104314834F\",\"interval\":"+ strconv.Itoa(testInterval) +"}\n"),
+	[]byte("{\"op\":\"24201\",\"ip\":\"" + testIPv6 + "\",\"cell_id\":21229824,\"ue_mode\":2,\"iccid\":\"8931089318104314834F\",\"interval\":"+ strconv.Itoa(testInterval) +"}\n"),	
+}
 var errorCases [][]byte = [][]byte{
 	[]byte("{\"op\":,\"ip\":\"10.160.73.64\",\"cell_id\":21229824,\"ue_mode\":2,\"iccid\":\"8931089318104314834F\",\"interval\":10}"),
 	[]byte("{\"op\":\"24201\",\"ip\":,\"cell_id\":21229824,\"ue_mode\":2,\"iccid\":\"8931089318104314834F\",\"interval\":10}"),
@@ -36,12 +40,12 @@ var errorCases [][]byte = [][]byte{
 	[]byte("{\"op\":\"24201\",\"ip\":\"10.160.73.64\",\"cell_id\":21229824,\"ue_mode\":2,\"iccid\":\"2331089318104314834F\",\"interval\":10}"),
 	[]byte("{\"op\":\"100000\",\"ip\":\"10.160.73.64\",\"cell_id\":21229824,\"ue_mode\":2,\"iccid\":\"8931089318104314834F\",\"interval\":10}"),
 	[]byte("{\"op\":\"24201\",\"ip\":\"10.160.73.64\",\"cell_id\":21229824,\"ue_mode\":3,\"iccid\":\"8931089318104314834F\",\"interval\":10}"),
+	[]byte("{\"op\":\"24201\",\"ip\":\"O:0db8:85a3:08d3:1319:8a2e:0370:7344\",\"cell_id\":21229824,\"ue_mode\":3,\"iccid\":\"8931089318104314834F\",\"interval\":10}"),
 }
 var startTime time.Time
 const threadCount = 3
-const sendPacketCount = 2
-// thread count * protocol count * packets saved (2 * received & 1 * timeout)
-const expectedPacketCount = threadCount * 2 * (sendPacketCount + 1)
+// thread count * protocol count * packets saved (2 * sent & 1 * timeout)
+const expectedPacketCount = threadCount * 2 * (len(testCases) + 1)
 
 func TestMain(m *testing.M) {
 	startTime = time.Now()
@@ -74,9 +78,9 @@ func TCPFunc(t *testing.T) {
 	}
 	defer conn.Close()
 	
-	for i := 0; i < sendPacketCount; i++ {
+	for _, v := range testCases {
 
-		if _, err = conn.Write(testBuffer); err != nil {
+		if _, err = conn.Write(v); err != nil {
 			conn.Close()
 			t.Error("Failed to write")
 		}
@@ -136,8 +140,8 @@ func UDPFunc(t *testing.T) {
  
 	defer conn.Close()
 	
-	for i := 0; i < sendPacketCount; i++ {
-		if _, err = conn.Write(testBuffer); err != nil {
+	for _, v := range testCases {
+		if _, err = conn.Write(v); err != nil {
 			conn.Close()
 			t.Error("Failed to write")
 		}
@@ -171,7 +175,7 @@ func UDPFunc(t *testing.T) {
 
 func TestHandleData(t *testing.T) {
 	for _,errorCase := range errorCases {
-		ret, _, err := HandleData(errorCase, "UDP", testIP)
+		ret, _, err := HandleData(errorCase, "UDP", testIPv4)
 		if err == nil && strings.Compare(string(ret), string(dcBuffer)) != 0{
 			t.Errorf("Wrong format was accepted by server. Sent: %s\n", errorCase)
 		}
@@ -215,7 +219,7 @@ func TestOutput(t *testing.T) {
 			err = json.Unmarshal(body, &data)
 			if err != nil {
 				t.Error("Failed to read json data")
-			} else if data.Data.IP == testIP {
+			} else if data.Data.IP == testIPv4 || data.Data.IP == testIPv6 {
 				foundCount++	
 			}
 		}
