@@ -8,6 +8,7 @@ import (
 	"bytes"
 	"strings"
 	"io/ioutil"
+	"strconv"
 	"log"
 	"github.com/aws/aws-sdk-go/aws"
 	"github.com/aws/aws-sdk-go/service/s3"
@@ -17,7 +18,7 @@ import (
 
 const testInterval = 10
 const testIP = "0.0.0.0"
-var testBuffer []byte = []byte("{\"op\":\"24201\",\"ip\":\"" + testIP + "\",\"cell_id\":21229824,\"ue_mode\":2,\"iccid\":\"8931089318104314834F\",\"interval\":10}\n")
+var testBuffer []byte = []byte("{\"op\":\"24201\",\"ip\":\"" + testIP + "\",\"cell_id\":21229824,\"ue_mode\":2,\"iccid\":\"8931089318104314834F\",\"interval\":"+ strconv.Itoa(testInterval) +"}\n")
 var errorCases [][]byte = [][]byte{
 	[]byte("{\"op\":,\"ip\":\"10.160.73.64\",\"cell_id\":21229824,\"ue_mode\":2,\"iccid\":\"8931089318104314834F\",\"interval\":10}"),
 	[]byte("{\"op\":\"24201\",\"ip\":,\"cell_id\":21229824,\"ue_mode\":2,\"iccid\":\"8931089318104314834F\",\"interval\":10}"),
@@ -38,6 +39,9 @@ var errorCases [][]byte = [][]byte{
 }
 var startTime time.Time
 const threadCount = 3
+const sendPacketCount = 2
+// thread count * protocol count * packets saved (2 * received & 1 * timeout)
+const expectedPacketCount = threadCount * 2 * (sendPacketCount + 1)
 
 func TestMain(m *testing.M) {
 	startTime = time.Now()
@@ -70,35 +74,39 @@ func TCPFunc(t *testing.T) {
 	}
 	defer conn.Close()
 	
-	if _, err = conn.Write(testBuffer); err != nil {
-		conn.Close()
-		t.Error("Failed to write")
-	}
+	for i := 0; i < sendPacketCount; i++ {
 
-	timer := time.NewTimer(time.Duration(testInterval + 1) * time.Second);
-	go func() {
-		select{
-			case <-timer.C:
-				t.Error("Server failed to answer packet")
-				conn.Close()
-			case <-doneChan:
-				timer.Stop()
-				return
+		if _, err = conn.Write(testBuffer); err != nil {
+			conn.Close()
+			t.Error("Failed to write")
 		}
-	}()
 
-	tempBuf := make([]byte, 256)
-	n, err := conn.Read(tempBuf)
-	if err != nil {
-		conn.Close()
-		t.Error("Error reading connection")
-		return
-	} else if bytes.Compare(tempBuf[:n], dcBuffer) == 0 {
-		conn.Close()
-		t.Error("Wrong format in packet")
-		return
+		timer := time.NewTimer(time.Duration(testInterval + 1) * time.Second);
+		go func() {
+			select{
+				case <-timer.C:
+					t.Error("Server failed to answer packet")
+					conn.Close()
+				case <-doneChan:
+					timer.Stop()
+					return
+			}
+		}()
+
+		t.Logf("Wait for server to return UDP packet\n")
+		tempBuf := make([]byte, 256)
+		n, err := conn.Read(tempBuf)
+		if err != nil {
+			conn.Close()
+			t.Error("Error reading connection")
+			return
+		} else if bytes.Compare(tempBuf[:n], dcBuffer) == 0 {
+			conn.Close()
+			t.Error("Wrong format in packet")
+			return
+		}
+		doneChan<-true
 	}
-	doneChan<-true
 }
 
 func TestUDP(t *testing.T) {
@@ -129,35 +137,38 @@ func UDPFunc(t *testing.T) {
  
 	defer conn.Close()
 	
-	if _, err = conn.Write(testBuffer); err != nil {
-		conn.Close()
-		t.Error("Failed to write")
-	}
-
-	timer := time.NewTimer(time.Duration(testInterval + 1) * time.Second);
-	go func() {
-		select{
-			case <-timer.C:
-				t.Error("Server failed to answer packet")
-				conn.Close()
-			case <-doneChan:
-				timer.Stop()
-				return
+	for i := 0; i < sendPacketCount; i++ {
+		if _, err = conn.Write(testBuffer); err != nil {
+			conn.Close()
+			t.Error("Failed to write")
 		}
-	}()
 
-	tempBuf := make([]byte, 256)
-	n, err := conn.Read(tempBuf)
-	if err != nil {
-		conn.Close()
-		t.Error("Error reading connection")
-		return
-	} else if bytes.Compare(tempBuf[:n], dcBuffer) == 0 {
-		conn.Close()
-		t.Error("Wrong format in packet")
-		return
+		timer := time.NewTimer(time.Duration(testInterval + 1) * time.Second);
+		go func() {
+			select{
+				case <-timer.C:
+					t.Error("Server failed to answer packet")
+					conn.Close()
+				case <-doneChan:
+					timer.Stop()
+					return
+			}
+		}()
+		
+		t.Logf("Wait for server to return TCP packet\n")
+		tempBuf := make([]byte, 256)
+		n, err := conn.Read(tempBuf)
+		if err != nil {
+			conn.Close()
+			t.Error("Error reading connection")
+			return
+		} else if bytes.Compare(tempBuf[:n], dcBuffer) == 0 {
+			conn.Close()
+			t.Error("Wrong format in packet")
+			return
+		}
+		doneChan<-true
 	}
-	doneChan<-true
 }
 
 func TestHandleData(t *testing.T) {
@@ -169,7 +180,10 @@ func TestHandleData(t *testing.T) {
 	}
 }
 
-func TestOutput(t *testing.T) {	
+func TestOutput(t *testing.T) {
+	t.Logf("Wait for timeout packets to be written\n")
+	// Wait for timeout + 10%
+	time.Sleep(time.Duration(newPacketTimeout *1.1)*time.Second)
 	endTime := time.Now()
 
 	sess, err := session.NewSession(&aws.Config{
@@ -187,7 +201,7 @@ func TestOutput(t *testing.T) {
         t.Error("Unable to get bucket items", err)
     }
 
-	var i int
+	var foundCount int
     for _, item := range resp.Contents {
 		tempTime := *item.LastModified
 		if tempTime.After(startTime) && tempTime.Before(endTime)  {
@@ -205,11 +219,12 @@ func TestOutput(t *testing.T) {
 			if err != nil {
 				t.Error("Failed to read json data")
 			} else if data.Data.IP == testIP {
-				i++	
+				foundCount++	
 			}
 		}
 	}
-	if i != threadCount*2 {
-		t.Errorf("Expected number of files: %d, Found:%d\n", threadCount*2, i)
+
+	if foundCount != expectedPacketCount{
+		t.Errorf("Expected number of files: %d, Found:%d\n", expectedPacketCount, foundCount)
 	}
 }

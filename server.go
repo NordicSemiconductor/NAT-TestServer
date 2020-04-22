@@ -19,6 +19,9 @@ import (
 	"github.com/google/uuid"
 	"context"
 	"os"
+	"container/list"
+	"sync"
+	"io"
 )
 
 type Packet struct{
@@ -43,15 +46,27 @@ type SaveRoutineStruct struct {
 	Data SaveData
 }
 
+type UDPClient struct {
+	Addr net.Addr
+	Timer *time.Timer
+	DoneChan chan bool
+}
+
+type SafeUDPClientList struct {
+	ClientList *list.List
+	Mux sync.Mutex
+}
+
 const UDPport = ":3050"
 const TCPport = ":3051"
-const newPacketTimeout = 10
+const newPacketTimeout = 60
 const maxBufferSize = 256
 const schemaFile = "schema.json"
 const timeFormat = "2006-01-02T15:04:05.00-0700"
 var dcBuffer []byte = []byte("Error occured.\nConnection closed.\n")
 var saveChan chan SaveRoutineStruct
 var schemaLoader gojsonschema.JSONLoader
+var SafeUDPClients SafeUDPClientList
 
 func SaveRoutine(){
 	awsBucket := os.Getenv("AWS_BUCKET")
@@ -114,6 +129,8 @@ func HandleData(buffer []byte, protocol string, addr string) ([]byte, SaveRoutin
 		return nil, SaveRoutineStruct{}, errors.New("Wrong format in packet")
 	}
 
+	log.Printf("%s Packet received from %s\n", protocol, addr)
+
 	var packet Packet
 	err = json.Unmarshal(buffer, &packet)
 	if err != nil {
@@ -131,7 +148,9 @@ func HandleData(buffer []byte, protocol string, addr string) ([]byte, SaveRoutin
 }
 
 func HandleUDP(pc net.PacketConn,addr net.Addr, buffer []byte){
-	retBuffer, saveData, err := HandleData(buffer, "UDP", addr.String())
+	doneChan := make(chan bool)
+
+	retBuffer, recvData, err := HandleData(buffer, "UDP", addr.String())
 	if err != nil {
 		log.Printf("Invalid UDP Packet received from %s. Connection terminated.\n", addr.String())
 		_, err = pc.WriteTo(dcBuffer, addr)
@@ -144,26 +163,64 @@ func HandleUDP(pc net.PacketConn,addr net.Addr, buffer []byte){
 	_, err = pc.WriteTo(retBuffer, addr)
 	if err != nil {
 		log.Printf("UDP write to %s failed, error: %s\n", addr.String(), err.Error())
-		saveData.Data.Timeout = true
-		saveChan <- saveData
 		return
 	}
-	log.Printf("Packet sent to %s\n", addr.String())
+	log.Printf("UDP Packet sent to %s\n", addr.String())
+
+	timer := time.NewTimer(newPacketTimeout * time.Second);
+
+	SafeUDPClients.Mux.Lock()
+	clientRef := SafeUDPClients.ClientList.PushBack(UDPClient{Addr: addr, Timer: timer, DoneChan: doneChan})
+	SafeUDPClients.Mux.Unlock()
+	select{
+		case <-timer.C:
+			SafeUDPClients.Mux.Lock()
+			SafeUDPClients.ClientList.Remove(clientRef)
+			SafeUDPClients.Mux.Unlock()
+
+			log.Printf("UDP connection to %s timed out. Connection terminated.\n", addr.String())
+			recvData.Data.Timeout = true
+			saveChan <- recvData
+		case <-doneChan:
+			timer.Stop()
+	}
+}
+
+func StopUDPClientTimeout(addr net.Addr) {
+	SafeUDPClients.Mux.Lock()
+	for e := SafeUDPClients.ClientList.Front(); e != nil; e = e.Next() {
+		client := e.Value.(UDPClient)
+		if strings.Compare(client.Addr.String(), addr.String()) == 0 {
+			client.Timer.Stop()
+			SafeUDPClients.ClientList.Remove(e)
+			break
+		}
+	}
+	SafeUDPClients.Mux.Unlock()
 }
 
 func HandleTCP(conn net.Conn){
+	var recvData SaveRoutineStruct
 	for {
 		buffer := make([]byte, maxBufferSize)
 		
 		n, err := conn.Read(buffer)
-		if err != nil {
+		if err == io.EOF && recvData != (SaveRoutineStruct{}) {
+			log.Printf("TCP connection to %s timed out. Connection terminated.\n", conn.RemoteAddr().String())
+			recvData.Data.Timeout = true
+			saveChan <- recvData
+			conn.Close()
+			return
+		} else if err != nil {
+			log.Printf("Error reading UDP connection %s, error: %s", conn.RemoteAddr().String(), err.Error())
 			_, err = conn.Write(dcBuffer)
 			if err != nil {}
 			conn.Close()
 			return
 		}
 
-		retBuffer, saveData, err := HandleData(buffer[:n-1], "TCP", conn.RemoteAddr().String())
+		var retBuffer []byte
+		retBuffer, recvData, err = HandleData(buffer[:n-1], "TCP", conn.RemoteAddr().String())
 		if err != nil {
 			log.Printf("Invalid TCP Packet received from %s. Connection terminated.\n", conn.RemoteAddr().String())
 			_, err = conn.Write(dcBuffer)
@@ -172,17 +229,13 @@ func HandleTCP(conn net.Conn){
 			return
 		}
 
-		log.Printf("TCP Packet received from %s\n", conn.RemoteAddr().String())
-		
 		_, err = conn.Write(retBuffer)
 		if err != nil {
 			log.Printf("TCP write to %s failed. Connection terminated\n", conn.RemoteAddr().String())
-			saveData.Data.Timeout = true
-			saveChan <- saveData
 			conn.Close()
 			return
 		}
-		log.Printf("Packet sent to %s\n", conn.RemoteAddr().String())
+		log.Printf("TCP Packet sent to %s\n", conn.RemoteAddr().String())
 	}
 }
 
@@ -192,10 +245,12 @@ func AcceptUDP(pc net.PacketConn){
 
 		n, addr, err := pc.ReadFrom(buffer)
 		if err != nil {
+			log.Printf("Error reading UDP connection %s, error: %s", addr.String(), err.Error())
 			continue
 		}
 
 		go HandleUDP(pc, addr, buffer[:n-1])
+		go StopUDPClientTimeout(addr)
 	}
 }
 
@@ -213,6 +268,7 @@ func AcceptTCP(l net.Listener){
 func main(){
 	done := make(chan bool)
 	saveChan = make(chan SaveRoutineStruct)
+	SafeUDPClients = SafeUDPClientList{ClientList: list.New()}
 
 	absPath, _ := filepath.Abs(schemaFile)
 	absPath = "file:///" + strings.ReplaceAll(absPath, "\\", "/")
