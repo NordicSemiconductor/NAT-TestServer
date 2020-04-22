@@ -93,7 +93,6 @@ func TCPFunc(t *testing.T) {
 			}
 		}()
 
-		t.Logf("Wait for server to return UDP packet\n")
 		tempBuf := make([]byte, 256)
 		n, err := conn.Read(tempBuf)
 		if err != nil {
@@ -155,7 +154,6 @@ func UDPFunc(t *testing.T) {
 			}
 		}()
 		
-		t.Logf("Wait for server to return TCP packet\n")
 		tempBuf := make([]byte, 256)
 		n, err := conn.Read(tempBuf)
 		if err != nil {
@@ -181,8 +179,7 @@ func TestHandleData(t *testing.T) {
 }
 
 func TestOutput(t *testing.T) {
-	t.Logf("Wait for timeout packets to be written\n")
-	// Wait for timeout + 10%
+	// Wait for timeout + 10% for timeout packets to be written
 	time.Sleep(time.Duration(newPacketTimeout *1.1)*time.Second)
 	endTime := time.Now()
 
