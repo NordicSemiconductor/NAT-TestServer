@@ -21,8 +21,31 @@
     "@aws-cdk/aws-s3": "^1.34.1",
     "@aws-cdk/core": "^1.34.1",
     "@bifravst/code-style": "^7.1.4",
+    "@commitlint/cli": "^8.3.5",
+    "@commitlint/config-angular": "^8.3.4",
     "@types/node": "^13.13.2",
     "aws-cdk": "^1.34.1",
+    "husky": "^4.2.5",
+    "lint-staged": "^10.1.7",
+    "prettier": "^2.0.5",
     "typescript": "^3.8.3"
+  },
+  "husky": {
+    "hooks": {
+      "commit-msg": "commitlint -e",
+      "pre-commit": "lint-staged && npx tsc"
+    }
+  },
+  "lint-staged": {
+    "*.{md,json,yaml,yml}": [
+      "prettier --write"
+    ],
+    "*.{ts,tsx}": [
+      "prettier --write",
+      "eslint --ext .js,.ts"
+    ],
+    "*.go": [
+      "gofmt -w"
+    ]
   }
 }
