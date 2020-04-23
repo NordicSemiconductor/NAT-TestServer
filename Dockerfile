@@ -1,0 +1,25 @@
+FROM golang:latest as builder
+
+WORKDIR /build
+COPY server.go /build/
+RUN go version
+RUN cd /build && \
+    go get -v -t -d ./... && \
+    CGO_ENABLED=0 go build -v -o server .
+
+FROM alpine:3.9.4
+RUN adduser -S -D -H server
+USER server
+COPY --from=builder /build /server
+COPY schema.json /server
+RUN ls -la /server
+EXPOSE 3051/tcp
+EXPOSE 3050/udp
+WORKDIR /server
+CMD ["./server"]
+ARG AWS_BUCKET
+ARG AWS_ACCESS_KEY_ID
+ARG AWS_SECRET_ACCESS_KEY
+ENV AWS_BUCKET=$AWS_BUCKET
+ENV AWS_ACCESS_KEY_ID=$AWS_ACCESS_KEY_ID
+ENV AWS_SECRET_ACCESS_KEY=$AWS_SECRET_ACCESS_KEY

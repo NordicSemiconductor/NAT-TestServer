@@ -1,0 +1,16 @@
+name: Test Docker Image
+
+on:
+  pull_request:
+    paths:
+      - Dockerfile
+      - .github/workflows/test-docker.yaml
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@master
+      - name: Build image
+        run: |
+          docker build -t nordicsemiconductor/nat-testserver .
