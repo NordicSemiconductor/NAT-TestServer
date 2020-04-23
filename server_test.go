@@ -6,7 +6,6 @@ import (
 	"os"
 	"time"
 	"bytes"
-	"strings"
 	"io/ioutil"
 	"strconv"
 	"log"
@@ -16,31 +15,30 @@ import (
 	"encoding/json"
 )
 
-const testInterval = 10
+const testInterval = 5
 const testIPv4 = "0.0.0.0"
 const testIPv6 = "0000:0000:0000:0000:0000:0000:0000:0000"
-var testCases [2][]byte = [2][]byte{
-	[]byte("{\"op\":\"24201\",\"ip\":\"" + testIPv4 + "\",\"cell_id\":21229824,\"ue_mode\":2,\"iccid\":\"8931089318104314834F\",\"interval\":"+ strconv.Itoa(testInterval) +"}\n"),
-	[]byte("{\"op\":\"24201\",\"ip\":\"" + testIPv6 + "\",\"cell_id\":21229824,\"ue_mode\":2,\"iccid\":\"8931089318104314834F\",\"interval\":"+ strconv.Itoa(testInterval) +"}\n"),	
+var testCases [3][]byte = [3][]byte{
+	[]byte("{\"op\":\"24201\",\"ip\":[\"" + testIPv4 + "\"],\"cell_id\":21229824,\"ue_mode\":2,\"iccid\":\"8931089318104314834F\",\"interval\":"+ strconv.Itoa(testInterval) +"}\n"),
+	[]byte("{\"op\":\"24201\",\"ip\":[\"" + testIPv6 + "\"],\"cell_id\":21229824,\"ue_mode\":2,\"iccid\":\"8931089318104314834F\",\"interval\":"+ strconv.Itoa(testInterval) +"}\n"),
+	[]byte("{\"op\":\"242011\",\"ip\":[\"" + testIPv4 + "\",\"" + testIPv6 + "\"],\"cell_id\":21229824,\"ue_mode\":2,\"iccid\":\"8931089318104314834F\",\"interval\":"+ strconv.Itoa(testInterval) +"}\n"),
 }
 var errorCases [][]byte = [][]byte{
 	[]byte("{\"op\":,\"ip\":\"10.160.73.64\",\"cell_id\":21229824,\"ue_mode\":2,\"iccid\":\"8931089318104314834F\",\"interval\":10}"),
 	[]byte("{\"op\":\"24201\",\"ip\":,\"cell_id\":21229824,\"ue_mode\":2,\"iccid\":\"8931089318104314834F\",\"interval\":10}"),
-	[]byte("{\"op\":\"24201\",\"ip\":\"10.160.73.64\",\"cell_id\":,\"ue_mode\":2,\"iccid\":\"8931089318104314834F\",\"interval\":10}"),
-	[]byte("{\"op\":\"24201\",\"ip\":\"10.160.73.64\",\"cell_id\":21229824,\"ue_mode\":,\"iccid\":\"8931089318104314834F\",\"interval\":10}"),
-	[]byte("{\"op\":\"24201\",\"ip\":\"10.160.73.64\",\"cell_id\":21229824,\"ue_mode\":2,\"iccid\":,\"interval\":10}"),
-	[]byte("{\"op\":\"24201\",\"ip\":\"10.160.73.64\",\"cell_id\":21229824,\"ue_mode\":2,\"iccid\":\"8931089318104314834F\",\"interval\":}"),
-	[]byte("{\"op\":\"24201\",\"ip\":\"10.160.73.64\",\"cell_id\":21229824,\"ue_mode\":2,\"iccid\":\"8931089318104314834F\",\"interval\":10,\"temp\":0}"),
-	[]byte("{\"op\":\"24201\",\"ip\":\"10.160.73.64\",\"cell_id\":21229824,\"ue_mode\":2,\"iccid\":\"8931089318104314834F\"}"),
-	[]byte("{\"op\":\"24201\",\"ip\":\"10.160.73.64\",\"cell_id\":21229824,\"ue_mode\":2,\"iccid\":\"\",\"interval\":10}"),
-	[]byte("{\"op\":\"24201\",\"ip\":\"10.160.73.64\",\"cell_id\":21229824,\"ue_mode\":2,\"iccid\":\"8931089318104314834F\",\"interval\":-1}"),
-	[]byte("{\"op\":\"24201\",\"ip\":\"256.256.256.256\",\"cell_id\":21229824,\"ue_mode\":2,\"iccid\":\"8931089318104314834F\",\"interval\":10}"),
-	[]byte("{\"op\":\"24201\",\"ip\":\"10-160-73-64\",\"cell_id\":21229824,\"ue_mode\":2,\"iccid\":\"8931089318104314834F\",\"interval\":10}"),
-	[]byte("{\"op\":\"24201\",\"ip\":\"10.160.73.64.10\",\"cell_id\":21229824,\"ue_mode\":2,\"iccid\":\"8931089318104314834F\",\"interval\":10}"),
-	[]byte("{\"op\":\"24201\",\"ip\":\"10.160.73.64\",\"cell_id\":21229824,\"ue_mode\":2,\"iccid\":\"2331089318104314834F\",\"interval\":10}"),
-	[]byte("{\"op\":\"100000\",\"ip\":\"10.160.73.64\",\"cell_id\":21229824,\"ue_mode\":2,\"iccid\":\"8931089318104314834F\",\"interval\":10}"),
-	[]byte("{\"op\":\"24201\",\"ip\":\"10.160.73.64\",\"cell_id\":21229824,\"ue_mode\":3,\"iccid\":\"8931089318104314834F\",\"interval\":10}"),
-	[]byte("{\"op\":\"24201\",\"ip\":\"O:0db8:85a3:08d3:1319:8a2e:0370:7344\",\"cell_id\":21229824,\"ue_mode\":3,\"iccid\":\"8931089318104314834F\",\"interval\":10}"),
+	[]byte("{\"op\":\"24201\",\"ip\":[\"10.160.73.64\"],\"cell_id\":,\"ue_mode\":2,\"iccid\":\"8931089318104314834F\",\"interval\":10}"),
+	[]byte("{\"op\":\"24201\",\"ip\":[\"10.160.73.64\"],\"cell_id\":21229824,\"ue_mode\":,\"iccid\":\"8931089318104314834F\",\"interval\":10}"),
+	[]byte("{\"op\":\"24201\",\"ip\":[\"10.160.73.64\"],\"cell_id\":21229824,\"ue_mode\":2,\"iccid\":,\"interval\":10}"),
+	[]byte("{\"op\":\"24201\",\"ip\":[\"10.160.73.64\"],\"cell_id\":21229824,\"ue_mode\":2,\"iccid\":\"8931089318104314834F\",\"interval\":}"),
+	[]byte("{\"op\":\"24201\",\"ip\":[\"10.160.73.64\"],\"cell_id\":21229824,\"ue_mode\":2,\"iccid\":\"8931089318104314834F\",\"interval\":10,\"temp\":0}"),
+	[]byte("{\"op\":\"24201\",\"ip\":[\"10.160.73.64\"],\"cell_id\":21229824,\"ue_mode\":2,\"iccid\":\"8931089318104314834F\"}"),
+	[]byte("{\"op\":\"24201\",\"ip\":[\"10.160.73.64\"],\"cell_id\":21229824,\"ue_mode\":2,\"iccid\":\"\",\"interval\":10}"),
+	[]byte("{\"op\":\"24201\",\"ip\":[\"10.160.73.64\"],\"cell_id\":21229824,\"ue_mode\":2,\"iccid\":\"8931089318104314834F\",\"interval\":-1}"),
+	[]byte("{\"op\":\"24201\",\"ip\":[\"10.160.73.64\"],\"cell_id\":21229824,\"ue_mode\":2,\"iccid\":\"2331089318104314834F\",\"interval\":10}"),
+	[]byte("{\"op\":\"1000000\",\"ip\":[\"10.160.73.64\"],\"cell_id\":21229824,\"ue_mode\":2,\"iccid\":\"8931089318104314834F\",\"interval\":10}"),
+	[]byte("{\"op\":\"1000\",\"ip\":[\"10.160.73.64\"],\"cell_id\":21229824,\"ue_mode\":2,\"iccid\":\"8931089318104314834F\",\"interval\":10}"),
+	[]byte("{\"op\":\"24201\",\"ip\":[\"10.160.73.64\"],\"cell_id\":21229824,\"ue_mode\":3,\"iccid\":\"8931089318104314834F\",\"interval\":10}"),
+	[]byte("{\"op\":\"24201\",\"ip\":[\"O:0db8:85a3:08d3:1319:8a2e:0370:7344\"],\"cell_id\":21229824,\"ue_mode\":3,\"iccid\":\"8931089318104314834F\",\"interval\":10}"),
 }
 var startTime time.Time
 const threadCount = 3
@@ -74,7 +72,8 @@ func TCPFunc(t *testing.T) {
 
     conn, err := net.Dial("tcp", ":3051")
     if err != nil {
-        t.Error("could not connect to server: ", err)
+		t.Error("could not connect to server: ", err)
+		return
 	}
 	defer conn.Close()
 	
@@ -83,6 +82,7 @@ func TCPFunc(t *testing.T) {
 		if _, err = conn.Write(v); err != nil {
 			conn.Close()
 			t.Error("Failed to write")
+			return
 		}
 
 		timer := time.NewTimer(time.Duration(testInterval + 1) * time.Second);
@@ -93,7 +93,6 @@ func TCPFunc(t *testing.T) {
 					conn.Close()
 				case <-doneChan:
 					timer.Stop()
-					return
 			}
 		}()
 
@@ -105,7 +104,7 @@ func TCPFunc(t *testing.T) {
 			return
 		} else if bytes.Compare(tempBuf[:n], dcBuffer) == 0 {
 			conn.Close()
-			t.Error("Wrong format in packet")
+			t.Errorf("Wrong format in packet: %s\n", v)
 			return
 		}
 		doneChan<-true
@@ -126,16 +125,19 @@ func UDPFunc(t *testing.T) {
     ServerAddr,err := net.ResolveUDPAddr("udp","127.0.0.1:3050")
     if err != nil {
 		t.Error("Error resolving remote address")
+		return
 	}
  
     LocalAddr, err := net.ResolveUDPAddr("udp", "127.0.0.1:0")
     if err != nil {
 		t.Error("Error resolving local address")
+		return
 	}
   
 	conn, err := net.DialUDP("udp", LocalAddr, ServerAddr)
 	if err != nil {
 		t.Error("Error connecting to server")
+		return
 	}
  
 	defer conn.Close()
@@ -144,6 +146,7 @@ func UDPFunc(t *testing.T) {
 		if _, err = conn.Write(v); err != nil {
 			conn.Close()
 			t.Error("Failed to write")
+			return
 		}
 
 		timer := time.NewTimer(time.Duration(testInterval + 1) * time.Second);
@@ -166,7 +169,7 @@ func UDPFunc(t *testing.T) {
 			return
 		} else if bytes.Compare(tempBuf[:n], dcBuffer) == 0 {
 			conn.Close()
-			t.Error("Wrong format in packet")
+			t.Errorf("Wrong format in packet: %s\n", v)
 			return
 		}
 		doneChan<-true
@@ -175,8 +178,8 @@ func UDPFunc(t *testing.T) {
 
 func TestHandleData(t *testing.T) {
 	for _,errorCase := range errorCases {
-		ret, _, err := HandleData(errorCase, "UDP", testIPv4)
-		if err == nil && strings.Compare(string(ret), string(dcBuffer)) != 0{
+		_, _, err := HandleData(errorCase, "UDP", testIPv4)
+		if err == nil{
 			t.Errorf("Wrong format was accepted by server. Sent: %s\n", errorCase)
 		}
 	}
@@ -219,7 +222,7 @@ func TestOutput(t *testing.T) {
 			err = json.Unmarshal(body, &data)
 			if err != nil {
 				t.Error("Failed to read json data")
-			} else if data.Data.IP == testIPv4 || data.Data.IP == testIPv6 {
+			} else if data.Data.IP[0] == testIPv4 || data.Data.IP[0] == testIPv6 {
 				foundCount++	
 			}
 		}

@@ -26,7 +26,7 @@ import (
 
 type Packet struct{
 	Operator string `json:"op"`
-	IP string `json:"ip"`
+	IP [10]string `json:"ip"`
 	CellId int `json:"cell_id"`
 	UEMode int `json:"ue_mode"`
 	ICCID string `json:"iccid"`
@@ -126,7 +126,7 @@ func HandleData(buffer []byte, protocol string, addr string) ([]byte, SaveRoutin
 	if err != nil {
 		return nil, SaveRoutineStruct{}, err
 	} else if !result.Valid() {
-		return nil, SaveRoutineStruct{}, errors.New("Wrong format in packet")
+		return nil, SaveRoutineStruct{}, errors.New("Packet uses wrong format.\n")
 	}
 
 	log.Printf("%s Packet received from %s\n", protocol, addr)
@@ -152,7 +152,7 @@ func HandleUDP(pc net.PacketConn,addr net.Addr, buffer []byte){
 
 	retBuffer, recvData, err := HandleData(buffer, "UDP", addr.String())
 	if err != nil {
-		log.Printf("Invalid UDP Packet received from %s. Connection terminated.\n", addr.String())
+		log.Printf("HandleData Error: %s\nConnection to %s terminated.\n", err.Error(), addr.String())
 		_, err = pc.WriteTo(dcBuffer, addr)
 		if err != nil {}
 		return
@@ -222,7 +222,7 @@ func HandleTCP(conn net.Conn){
 		var retBuffer []byte
 		retBuffer, recvData, err = HandleData(buffer[:n-1], "TCP", conn.RemoteAddr().String())
 		if err != nil {
-			log.Printf("Invalid TCP Packet received from %s. Connection terminated.\n", conn.RemoteAddr().String())
+			log.Printf("HandleData Error: %s\nConnection to %s terminated.\n", err.Error(), conn.RemoteAddr().String())
 			_, err = conn.Write(dcBuffer)
 			if err != nil {}
 			conn.Close()
