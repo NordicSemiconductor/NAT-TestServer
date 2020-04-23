@@ -22,11 +22,12 @@ import (
 	"container/list"
 	"sync"
 	"io"
+	"reflect"
 )
 
 type Packet struct{
 	Operator string `json:"op"`
-	IP [10]string `json:"ip"`
+	IP []string `json:"ip"`
 	CellId int `json:"cell_id"`
 	UEMode int `json:"ue_mode"`
 	ICCID string `json:"iccid"`
@@ -205,7 +206,7 @@ func HandleTCP(conn net.Conn){
 		buffer := make([]byte, maxBufferSize)
 		
 		n, err := conn.Read(buffer)
-		if err == io.EOF && recvData != (SaveRoutineStruct{}) {
+		if err == io.EOF && !reflect.DeepEqual(recvData, SaveRoutineStruct{}){
 			log.Printf("TCP connection to %s timed out. Connection terminated.\n", conn.RemoteAddr().String())
 			recvData.Data.Timeout = true
 			saveChan <- recvData
