@@ -1,27 +1,28 @@
 package main
 
 import (
-	"testing"
+	"bytes"
+	"encoding/json"
+	"github.com/aws/aws-sdk-go/aws"
+	"github.com/aws/aws-sdk-go/aws/session"
+	"github.com/aws/aws-sdk-go/service/s3"
+	"io/ioutil"
+	"log"
 	"net"
 	"os"
-	"time"
-	"bytes"
-	"io/ioutil"
 	"strconv"
-	"log"
-	"github.com/aws/aws-sdk-go/aws"
-	"github.com/aws/aws-sdk-go/service/s3"
-	"github.com/aws/aws-sdk-go/aws/session"
-	"encoding/json"
+	"testing"
+	"time"
 )
 
 const testInterval = 5
 const testIPv4 = "0.0.0.0"
 const testIPv6 = "0000:0000:0000:0000:0000:0000:0000:0000"
+
 var testCases [3][]byte = [3][]byte{
-	[]byte("{\"op\":\"24201\",\"ip\":[\"" + testIPv4 + "\"],\"cell_id\":21229824,\"ue_mode\":2,\"iccid\":\"8931089318104314834F\",\"interval\":"+ strconv.Itoa(testInterval) +"}\n"),
-	[]byte("{\"op\":\"24201\",\"ip\":[\"" + testIPv6 + "\"],\"cell_id\":21229824,\"ue_mode\":2,\"iccid\":\"8931089318104314834F\",\"interval\":"+ strconv.Itoa(testInterval) +"}\n"),
-	[]byte("{\"op\":\"242011\",\"ip\":[\"" + testIPv4 + "\",\"" + testIPv6 + "\"],\"cell_id\":21229824,\"ue_mode\":2,\"iccid\":\"8931089318104314834F\",\"interval\":"+ strconv.Itoa(testInterval) +"}\n"),
+	[]byte("{\"op\":\"24201\",\"ip\":[\"" + testIPv4 + "\"],\"cell_id\":21229824,\"ue_mode\":2,\"iccid\":\"8931089318104314834F\",\"interval\":" + strconv.Itoa(testInterval) + "}\n"),
+	[]byte("{\"op\":\"24201\",\"ip\":[\"" + testIPv6 + "\"],\"cell_id\":21229824,\"ue_mode\":2,\"iccid\":\"8931089318104314834F\",\"interval\":" + strconv.Itoa(testInterval) + "}\n"),
+	[]byte("{\"op\":\"242011\",\"ip\":[\"" + testIPv4 + "\",\"" + testIPv6 + "\"],\"cell_id\":21229824,\"ue_mode\":2,\"iccid\":\"8931089318104314834F\",\"interval\":" + strconv.Itoa(testInterval) + "}\n"),
 }
 var errorCases [][]byte = [][]byte{
 	[]byte("{\"op\":,\"ip\":\"10.160.73.64\",\"cell_id\":21229824,\"ue_mode\":2,\"iccid\":\"8931089318104314834F\",\"interval\":10}"),
@@ -41,7 +42,9 @@ var errorCases [][]byte = [][]byte{
 	[]byte("{\"op\":\"24201\",\"ip\":[\"O:0db8:85a3:08d3:1319:8a2e:0370:7344\"],\"cell_id\":21229824,\"ue_mode\":3,\"iccid\":\"8931089318104314834F\",\"interval\":10}"),
 }
 var startTime time.Time
+
 const threadCount = 3
+
 // thread count * protocol count * packets saved (2 * sent & 1 * timeout)
 const expectedPacketCount = threadCount * 2 * (len(testCases) + 1)
 
@@ -52,7 +55,7 @@ func TestMain(m *testing.M) {
 	go main()
 
 	// Make sure server has started before trying to run tests
-	time.Sleep(time.Duration(5)*time.Second)
+	time.Sleep(time.Duration(5) * time.Second)
 
 	code := m.Run()
 
@@ -70,13 +73,13 @@ func TCPFunc(t *testing.T) {
 
 	doneChan := make(chan bool)
 
-    conn, err := net.Dial("tcp", ":3051")
-    if err != nil {
+	conn, err := net.Dial("tcp", ":3051")
+	if err != nil {
 		t.Error("could not connect to server: ", err)
 		return
 	}
 	defer conn.Close()
-	
+
 	for _, v := range testCases {
 
 		if _, err = conn.Write(v); err != nil {
@@ -85,14 +88,14 @@ func TCPFunc(t *testing.T) {
 			return
 		}
 
-		timer := time.NewTimer(time.Duration(testInterval + 1) * time.Second);
+		timer := time.NewTimer(time.Duration(testInterval+1) * time.Second)
 		go func() {
-			select{
-				case <-timer.C:
-					t.Error("Server failed to answer packet")
-					conn.Close()
-				case <-doneChan:
-					timer.Stop()
+			select {
+			case <-timer.C:
+				t.Error("Server failed to answer packet")
+				conn.Close()
+			case <-doneChan:
+				timer.Stop()
 			}
 		}()
 
@@ -107,7 +110,7 @@ func TCPFunc(t *testing.T) {
 			t.Errorf("Wrong format in packet: %s\n", v)
 			return
 		}
-		doneChan<-true
+		doneChan <- true
 	}
 }
 
@@ -122,26 +125,26 @@ func UDPFunc(t *testing.T) {
 
 	doneChan := make(chan bool)
 
-    ServerAddr,err := net.ResolveUDPAddr("udp","127.0.0.1:3050")
-    if err != nil {
+	ServerAddr, err := net.ResolveUDPAddr("udp", "127.0.0.1:3050")
+	if err != nil {
 		t.Error("Error resolving remote address")
 		return
 	}
- 
-    LocalAddr, err := net.ResolveUDPAddr("udp", "127.0.0.1:0")
-    if err != nil {
+
+	LocalAddr, err := net.ResolveUDPAddr("udp", "127.0.0.1:0")
+	if err != nil {
 		t.Error("Error resolving local address")
 		return
 	}
-  
+
 	conn, err := net.DialUDP("udp", LocalAddr, ServerAddr)
 	if err != nil {
 		t.Error("Error connecting to server")
 		return
 	}
- 
+
 	defer conn.Close()
-	
+
 	for _, v := range testCases {
 		if _, err = conn.Write(v); err != nil {
 			conn.Close()
@@ -149,18 +152,18 @@ func UDPFunc(t *testing.T) {
 			return
 		}
 
-		timer := time.NewTimer(time.Duration(testInterval + 1) * time.Second);
+		timer := time.NewTimer(time.Duration(testInterval+1) * time.Second)
 		go func() {
-			select{
-				case <-timer.C:
-					t.Error("Server failed to answer packet")
-					conn.Close()
-				case <-doneChan:
-					timer.Stop()
-					return
+			select {
+			case <-timer.C:
+				t.Error("Server failed to answer packet")
+				conn.Close()
+			case <-doneChan:
+				timer.Stop()
+				return
 			}
 		}()
-		
+
 		tempBuf := make([]byte, 256)
 		n, err := conn.Read(tempBuf)
 		if err != nil {
@@ -172,14 +175,14 @@ func UDPFunc(t *testing.T) {
 			t.Errorf("Wrong format in packet: %s\n", v)
 			return
 		}
-		doneChan<-true
+		doneChan <- true
 	}
 }
 
 func TestHandleData(t *testing.T) {
-	for _,errorCase := range errorCases {
+	for _, errorCase := range errorCases {
 		_, _, err := HandleData(errorCase, "UDP", testIPv4)
-		if err == nil{
+		if err == nil {
 			t.Errorf("Wrong format was accepted by server. Sent: %s\n", errorCase)
 		}
 	}
@@ -187,7 +190,7 @@ func TestHandleData(t *testing.T) {
 
 func TestOutput(t *testing.T) {
 	// Wait for timeout + 10% for timeout packets to be written
-	time.Sleep(time.Duration(newPacketTimeout *1.1)*time.Second)
+	time.Sleep(time.Duration(newPacketTimeout*1.1) * time.Second)
 	endTime := time.Now()
 
 	sess, err := session.NewSession(&aws.Config{
@@ -195,20 +198,20 @@ func TestOutput(t *testing.T) {
 	)
 	if err != nil {
 		log.Fatal("Error creating session ", err)
-	} 
+	}
 	svc := s3.New(sess, &aws.Config{
 		Region: aws.String(os.Getenv("AWS_REGION"))},
 	)
 
-    resp, err := svc.ListObjectsV2(&s3.ListObjectsV2Input{Bucket: aws.String(os.Getenv("AWS_BUCKET"))})
-    if err != nil {
-        t.Error("Unable to get bucket items", err)
-    }
+	resp, err := svc.ListObjectsV2(&s3.ListObjectsV2Input{Bucket: aws.String(os.Getenv("AWS_BUCKET"))})
+	if err != nil {
+		t.Error("Unable to get bucket items", err)
+	}
 
 	var foundCount int
-    for _, item := range resp.Contents {
+	for _, item := range resp.Contents {
 		tempTime := *item.LastModified
-		if tempTime.After(startTime) && tempTime.Before(endTime)  {
+		if tempTime.After(startTime) && tempTime.Before(endTime) {
 			obj, err := svc.GetObject(&s3.GetObjectInput{Bucket: aws.String(os.Getenv("AWS_BUCKET")), Key: aws.String(*item.Key)})
 			if err != nil {
 				t.Error("Unable to read bucket item", err)
@@ -223,12 +226,12 @@ func TestOutput(t *testing.T) {
 			if err != nil {
 				t.Error("Failed to read json data")
 			} else if data.Data.IP[0] == testIPv4 || data.Data.IP[0] == testIPv6 {
-				foundCount++	
+				foundCount++
 			}
 		}
 	}
 
-	if foundCount != expectedPacketCount{
+	if foundCount != expectedPacketCount {
 		t.Errorf("Expected number of files: %d, Found:%d\n", expectedPacketCount, foundCount)
 	}
 }
