@@ -58,8 +58,8 @@ type SafeUDPClientList struct {
 	Mux sync.Mutex
 }
 
-const UDPport = ":3050"
-const TCPport = ":3051"
+const UDPport = 3050
+const TCPport = 3051
 const newPacketTimeout = 60
 const maxBufferSize = 256
 const schemaFile = "schema.json"
@@ -275,12 +275,12 @@ func main(){
 	absPath = "file:///" + strings.ReplaceAll(absPath, "\\", "/")
 	schemaLoader = gojsonschema.NewReferenceLoader(absPath)
 
-	pc, err := net.ListenPacket("udp", UDPport)
+	pc, err := net.ListenPacket("udp", fmt.Sprintf(":%d", UDPport))
 	if err != nil {
 		log.Fatal(err)
 	}
 
-    l, err := net.Listen("tcp", TCPport)
+    l, err := net.Listen("tcp", fmt.Sprintf(":%d", TCPport))
     if err != nil {
         log.Fatal(err)
 	}
@@ -291,6 +291,11 @@ func main(){
 	go AcceptUDP(pc)
 	go AcceptTCP(l)
 	go SaveRoutine()
+
+	log.Printf("NAT Test Server started.\n")
+	log.Printf("TCP Port:   %d\n", TCPport)
+	log.Printf("UDP Port:   %d\n", UDPport)
+	log.Printf("AWS Bucket: %s\n", os.Getenv("AWS_BUCKET"))
 
 	<-done
 }
