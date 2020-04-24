@@ -70,7 +70,7 @@ var saveChan chan SaveRoutineStruct
 var schemaLoader gojsonschema.JSONLoader
 var SafeUDPClients SafeUDPClientList
 
-func SaveRoutine() {
+func SaveRoutine(prefix string) {
 	awsBucket := os.Getenv("AWS_BUCKET")
 	sess, err := session.NewSession(&aws.Config{})
 	if err != nil {
@@ -81,11 +81,14 @@ func SaveRoutine() {
 	for i := range saveChan {
 		buffer, err := json.Marshal(i.Data)
 		if err != nil {
-			log.Printf("JSON invalid. Cannot write to file, error:%d\n", err)
+			log.Printf("JSON invalid. Cannot write to file, error: %d\n", err)
+			return
 		}
 
 		newUUID, err := uuid.NewRandom()
 		if err != nil {
+			log.Printf("Failed to create new UUID: %d\n", err)
+			return
 		}
 
 		key := fmt.Sprintf("%s/%s-%s-%s.json", i.Timestamp.Format("2006/01/02"), i.Data.IP, i.Timestamp.Format("150405"), newUUID)
@@ -97,9 +100,13 @@ func SaveRoutine() {
 		}
 
 		go func() {
+			var Key = key
+			if len(prefix) > 0 {
+				Key = fmt.Sprintf("%s/%s", prefix, key)
+			}
 			_, err = svc.PutObjectWithContext(ctx, &s3.PutObjectInput{
 				Bucket: aws.String(awsBucket),
-				Key:    aws.String(key),
+				Key:    aws.String(Key),
 				Body:   strings.NewReader(string(buffer)),
 			})
 			if err != nil {
@@ -291,12 +298,17 @@ func main() {
 
 	go AcceptUDP(pc)
 	go AcceptTCP(l)
-	go SaveRoutine()
+
+	logPrefix := os.Getenv("LOG_PREFIX")
+	go SaveRoutine(logPrefix)
 
 	log.Printf("NAT Test Server started.\n")
 	log.Printf("TCP Port:       %d\n", TCPport)
 	log.Printf("UDP Port:       %d\n", UDPport)
 	log.Printf("AWS Bucket:     %s\n", os.Getenv("AWS_BUCKET"))
+	if len(logPrefix) > 0 {
+		log.Printf("Log prefix:     %s\n", logPrefix)
+	}
 	log.Printf("AWS Region:     %s\n", os.Getenv("AWS_REGION"))
 	log.Printf("AWS Access Key: %s\n", os.Getenv("AWS_ACCESS_KEY_ID"))
 

@@ -3,9 +3,11 @@ package main
 import (
 	"bytes"
 	"encoding/json"
+	"fmt"
 	"github.com/aws/aws-sdk-go/aws"
 	"github.com/aws/aws-sdk-go/aws/session"
 	"github.com/aws/aws-sdk-go/service/s3"
+	"github.com/google/uuid"
 	"io/ioutil"
 	"log"
 	"net"
@@ -41,17 +43,28 @@ var errorCases [][]byte = [][]byte{
 	[]byte("{\"op\":\"24201\",\"ip\":[\"10.160.73.64\"],\"cell_id\":21229824,\"ue_mode\":3,\"iccid\":\"8931089318104314834F\",\"interval\":10}"),
 	[]byte("{\"op\":\"24201\",\"ip\":[\"O:0db8:85a3:08d3:1319:8a2e:0370:7344\"],\"cell_id\":21229824,\"ue_mode\":3,\"iccid\":\"8931089318104314834F\",\"interval\":10}"),
 }
-var startTime time.Time
 
 const threadCount = 3
 
 // thread count * protocol count * packets saved (2 * sent & 1 * timeout)
 const expectedPacketCount = threadCount * 2 * (len(testCases) + 1)
 
-func TestMain(m *testing.M) {
-	startTime = time.Now()
+var testPrefix string
 
+func TestMain(m *testing.M) {
 	log.SetOutput(ioutil.Discard)
+
+	newUUID, err := uuid.NewRandom()
+	if err != nil {
+		log.Printf("Failed to create new UUID: %d\n", err)
+		os.Exit(1)
+		return
+	}
+	testPrefix = fmt.Sprintf("%s", newUUID)
+
+	os.Setenv("LOG_PREFIX", testPrefix)
+	defer os.Unsetenv("LOG_PREFIX")
+
 	go main()
 
 	// Make sure server has started before trying to run tests
@@ -191,43 +204,35 @@ func TestHandleData(t *testing.T) {
 func TestOutput(t *testing.T) {
 	// Wait for timeout + 10% for timeout packets to be written
 	time.Sleep(time.Duration(newPacketTimeout*1.1) * time.Second)
-	endTime := time.Now()
 
-	sess, err := session.NewSession(&aws.Config{
-		Region: aws.String(os.Getenv("AWS_REGION"))},
-	)
+	sess, err := session.NewSession(&aws.Config{})
 	if err != nil {
 		log.Fatal("Error creating session ", err)
 	}
-	svc := s3.New(sess, &aws.Config{
-		Region: aws.String(os.Getenv("AWS_REGION"))},
-	)
+	svc := s3.New(sess, &aws.Config{})
 
-	resp, err := svc.ListObjectsV2(&s3.ListObjectsV2Input{Bucket: aws.String(os.Getenv("AWS_BUCKET"))})
+	resp, err := svc.ListObjectsV2(&s3.ListObjectsV2Input{Bucket: aws.String(os.Getenv("AWS_BUCKET")), Prefix: aws.String(testPrefix)})
 	if err != nil {
 		t.Error("Unable to get bucket items", err)
 	}
 
 	var foundCount int
 	for _, item := range resp.Contents {
-		tempTime := *item.LastModified
-		if tempTime.After(startTime) && tempTime.Before(endTime) {
-			obj, err := svc.GetObject(&s3.GetObjectInput{Bucket: aws.String(os.Getenv("AWS_BUCKET")), Key: aws.String(*item.Key)})
-			if err != nil {
-				t.Error("Unable to read bucket item", err)
-			}
-			body, err := ioutil.ReadAll(obj.Body)
-			if err != nil {
-				t.Error("Failed to read body of file")
-			}
+		obj, err := svc.GetObject(&s3.GetObjectInput{Bucket: aws.String(os.Getenv("AWS_BUCKET")), Key: aws.String(*item.Key)})
+		if err != nil {
+			t.Error("Unable to read bucket item", err)
+		}
+		body, err := ioutil.ReadAll(obj.Body)
+		if err != nil {
+			t.Error("Failed to read body of file")
+		}
 
-			var data SaveData
-			err = json.Unmarshal(body, &data)
-			if err != nil {
-				t.Error("Failed to read json data")
-			} else if data.Data.IP[0] == testIPv4 || data.Data.IP[0] == testIPv6 {
-				foundCount++
-			}
+		var data SaveData
+		err = json.Unmarshal(body, &data)
+		if err != nil {
+			t.Error("Failed to read json data")
+		} else if data.Data.IP[0] == testIPv4 || data.Data.IP[0] == testIPv6 {
+			foundCount++
 		}
 	}
 
