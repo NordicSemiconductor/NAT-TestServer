@@ -72,15 +72,11 @@ var SafeUDPClients SafeUDPClientList
 
 func SaveRoutine() {
 	awsBucket := os.Getenv("AWS_BUCKET")
-	sess, err := session.NewSession(&aws.Config{
-		Region: aws.String(os.Getenv("AWS_REGION"))},
-	)
+	sess, err := session.NewSession(&aws.Config{})
 	if err != nil {
 		log.Fatal("Error creating session ", err)
 	}
-	svc := s3.New(sess, &aws.Config{
-		Region: aws.String(os.Getenv("AWS_REGION"))},
-	)
+	svc := s3.New(sess, &aws.Config{})
 
 	for i := range saveChan {
 		buffer, err := json.Marshal(i.Data)
@@ -298,9 +294,11 @@ func main() {
 	go SaveRoutine()
 
 	log.Printf("NAT Test Server started.\n")
-	log.Printf("TCP Port:   %d\n", TCPport)
-	log.Printf("UDP Port:   %d\n", UDPport)
-	log.Printf("AWS Bucket: %s\n", os.Getenv("AWS_BUCKET"))
+	log.Printf("TCP Port:       %d\n", TCPport)
+	log.Printf("UDP Port:       %d\n", UDPport)
+	log.Printf("AWS Bucket:     %s\n", os.Getenv("AWS_BUCKET"))
+	log.Printf("AWS Region:     %s\n", os.Getenv("AWS_REGION"))
+	log.Printf("AWS Access Key: %s\n", os.Getenv("AWS_ACCESS_KEY_ID"))
 
 	<-done
 }
