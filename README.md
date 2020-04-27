@@ -14,11 +14,14 @@ Make these environment variable available:
 > ℹ️ Linux users can use [direnv](https://direnv.net/) to simplify the process.
 
     export AWS_REGION=<...>
+    export AWS_REGION=<...>
     export AWS_BUCKET=<...>
     export AWS_ACCESS_KEY_ID=<...>
     export AWS_SECRET_ACCESS_KEY=<...>
 
-Receives NAT test messages from the [NAT Test Firmware](https://github.com/NordicSemiconductor/NAT-TestFirmware/) and logs them and timeout occurances to S3.
+Receives NAT test messages from the
+[NAT Test Firmware](https://github.com/NordicSemiconductor/NAT-TestFirmware/)
+and logs them and timeout occurances to S3.
 
 ## Testing
 
@@ -43,3 +46,11 @@ or add the `-v` option for more detailed output.
 
     # Send a package
     echo '{"op": "310410", "ip": ["10.160.1.82"], "cell_id": 84486415, "ue_mode": 2, "iccid": "8931080019073497795F", "interval":1}' | nc -w1 -u 127.0.0.1 3050
+
+## Continuous Deployment
+
+    export STACK_ID="${STACK_ID:-nat-test-resources}"
+    ECR_REPOSITORY_NAME=`aws cloudformation describe-stacks --stack-name $STACK_ID | jq -r '.Stacks[0].Outputs[] | select(.OutputKey == "cdEcrRepositoryName") | .OutputValue'`
+    ECR_REPOSITORY_URI=`aws cloudformation describe-stacks --stack-name $STACK_ID | jq -r '.Stacks[0].Outputs[] | select(.OutputKey == "cdEcrRepositoryUri") | .OutputValue'`
+    docker tag nordicsemiconductor/nat-testserver:latest ${ECR_REPOSITORY_URI}:latest
+    docker push ${ECR_REPOSITORY_URI}:latest
