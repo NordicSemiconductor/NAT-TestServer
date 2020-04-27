@@ -38,13 +38,16 @@ export class NATTestResourcesStack extends CloudFormation.Stack {
 		})
 
 		new CloudFormation.CfnOutput(this, 'userSecretAccessKey', {
-			value: accessKey.getAtt('SecretAccessKey').toString(),
+			value: accessKey.attrSecretAccessKey,
 			exportName: `${this.stackName}:userSecretAccessKey`,
 		})
 
 		// Continuous deployment
 
-		const cd = new CD(this, 'CD')
+		const cd = new CD(this, 'CD', {
+			bucket,
+			userAccessKey: accessKey,
+		})
 
 		new CloudFormation.CfnOutput(this, 'cdAccessKeyId', {
 			value: cd.accessKey.ref,
