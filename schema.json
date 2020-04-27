@@ -1,36 +1,36 @@
 {
-    "type": "object",
-    "properties": {
-        "op": {
-            "type": "string",
-            "minLength": 5,
-            "maxLength": 6
-        },
-        "ip": {
-            "type": "array",
-            "minItems": 1,
-            "items": {
-                "type": "string"
-            }
-        },
-        "cell_id": {
-            "type": "integer",
-            "minimum": 0
-        },
-        "ue_mode": {
-            "type": "integer",
-            "minimum": 0,
-            "maximum": 2
-        },
-        "iccid": {
-            "type": "string",
-            "pattern": "^89[0-9]{17}([0-9]|F)$"
-        },
-        "interval": {
-            "type": "integer",
-            "minimum": 1
-        }
+  "type": "object",
+  "properties": {
+    "op": {
+      "type": "string",
+      "minLength": 5,
+      "maxLength": 6
     },
-    "required": ["op", "ip", "cell_id", "ue_mode", "iccid", "interval"],
-    "additionalProperties": false
+    "ip": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "string"
+      }
+    },
+    "cell_id": {
+      "type": "integer",
+      "minimum": 0
+    },
+    "ue_mode": {
+      "type": "integer",
+      "minimum": 0,
+      "maximum": 2
+    },
+    "iccid": {
+      "type": "string",
+      "pattern": "^89[0-9]{17}([0-9]|F)?$"
+    },
+    "interval": {
+      "type": "integer",
+      "minimum": 1
+    }
+  },
+  "required": ["op", "ip", "cell_id", "ue_mode", "iccid", "interval"],
+  "additionalProperties": false
 }
