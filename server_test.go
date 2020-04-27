@@ -21,8 +21,9 @@ const testInterval = 5
 const testIPv4 = "0.0.0.0"
 const testIPv6 = "0000:0000:0000:0000:0000:0000:0000:0000"
 
-var testCases [3][]byte = [3][]byte{
+var testCases [4][]byte = [4][]byte{
 	[]byte("{\"op\":\"24201\",\"ip\":[\"" + testIPv4 + "\"],\"cell_id\":21229824,\"ue_mode\":2,\"iccid\":\"8931089318104314834F\",\"interval\":" + strconv.Itoa(testInterval) + "}\n"),
+	[]byte("{\"op\":\"24201\",\"ip\":[\"" + testIPv4 + "\"],\"cell_id\":21229824,\"ue_mode\":2,\"iccid\":\"8931089318104314834\",\"interval\":" + strconv.Itoa(testInterval) + "}\n"),
 	[]byte("{\"op\":\"24201\",\"ip\":[\"" + testIPv6 + "\"],\"cell_id\":21229824,\"ue_mode\":2,\"iccid\":\"8931089318104314834F\",\"interval\":" + strconv.Itoa(testInterval) + "}\n"),
 	[]byte("{\"op\":\"242011\",\"ip\":[\"" + testIPv4 + "\",\"" + testIPv6 + "\"],\"cell_id\":21229824,\"ue_mode\":2,\"iccid\":\"8931089318104314834F\",\"interval\":" + strconv.Itoa(testInterval) + "}\n"),
 }
