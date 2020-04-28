@@ -2,13 +2,13 @@
   "type": "object",
   "properties": {
     "op": {
-      "description": "Operator name",
+      "description": "Name of current network operator",
       "type": "string",
       "minLength": 5,
       "maxLength": 6
     },
     "ip": {
-      "description": "IP address of the device",
+      "description": "IP address of the device as IPv4, IPv6 or hostnames",
       "type": "array",
       "minItems": 1,
       "items": {
@@ -16,30 +16,30 @@
       }
     },
     "cell_id": {
-      "description": "Cell ID of the device",
+      "description": "Current E-UTRAN cell ID",
       "type": "integer",
       "minimum": 0
     },
     "ue_mode": {
-      "description": "Current mode",
+      "description": "UE mode of operation",
       "type": "integer",
       "minimum": 0,
       "maximum": 2
     },
     "lte_mode": {
-      "description": "LTE-M support mode",
+      "description": "1 if LTE-M is supported",
       "type": "integer",
       "minimum": 0,
       "maximum": 1
     },
     "nbiot_mode": {
-      "description": "NB-IoT support mode",
+      "description": "1 if NB-IoT is supported",
       "type": "integer",
       "minimum": 0,
       "maximum": 1
     },
     "gps_mode": {
-      "description": "GPS support mode",
+      "description": "1 if GNSS is supported",
       "type": "integer",
       "minimum": 0,
       "maximum": 1
