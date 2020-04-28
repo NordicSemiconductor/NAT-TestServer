@@ -2,11 +2,13 @@
   "type": "object",
   "properties": {
     "op": {
+      "description": "Operator name",
       "type": "string",
       "minLength": 5,
       "maxLength": 6
     },
     "ip": {
+      "description": "IP address of the device",
       "type": "array",
       "minItems": 1,
       "items": {
@@ -14,34 +16,41 @@
       }
     },
     "cell_id": {
+      "description": "Cell ID of the device",
       "type": "integer",
       "minimum": 0
     },
     "ue_mode": {
+      "description": "Current mode",
       "type": "integer",
       "minimum": 0,
       "maximum": 2
     },
     "lte_mode": {
+      "description": "LTE-M support mode",
       "type": "integer",
       "minimum": 0,
       "maximum": 1
     },
     "nbiot_mode": {
+      "description": "NB-IoT support mode",
       "type": "integer",
       "minimum": 0,
       "maximum": 1
     },
     "gps_mode": {
+      "description": "GPS support mode",
       "type": "integer",
       "minimum": 0,
       "maximum": 1
     },
     "iccid": {
+      "description": "SIM ICCID",
       "type": "string",
       "pattern": "^89[0-9]{17}([0-9]|F)?$"
     },
     "interval": {
+      "description": "Seconds to wait before answering client",
       "type": "integer",
       "minimum": 1
     }
@@ -51,6 +60,9 @@
     "ip",
     "cell_id",
     "ue_mode",
+    "lte_mode",
+    "nbiot_mode",
+    "gps_mode",
     "iccid",
     "interval"
   ],
