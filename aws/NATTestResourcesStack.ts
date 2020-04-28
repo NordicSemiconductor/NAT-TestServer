@@ -68,5 +68,15 @@ export class NATTestResourcesStack extends CloudFormation.Stack {
 			value: cd.ecr.repositoryUri,
 			exportName: `${this.stackName}:cdEcrRepositoryUri`,
 		})
+
+		new CloudFormation.CfnOutput(this, 'fargateArn', {
+			value: cd.fargate.serviceArn,
+			exportName: `${this.stackName}:fargateArn`,
+		})
+
+		new CloudFormation.CfnOutput(this, 'clusterArn', {
+			value: cd.cluster.clusterArn,
+			exportName: `${this.stackName}:clusterArn`,
+		})
 	}
 }

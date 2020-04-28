@@ -8,6 +8,8 @@ import * as Logs from '@aws-cdk/aws-logs'
 export class CD extends CloudFormation.Resource {
 	public readonly ecr: ECR.IRepository
 	public readonly accessKey: IAM.CfnAccessKey
+	public readonly fargate: ECS.IFargateService
+	public readonly cluster: ECS.ICluster
 
 	public constructor(
 		parent: CloudFormation.Stack,
@@ -49,11 +51,11 @@ export class CD extends CloudFormation.Resource {
 			],
 		})
 
-		const cluster = new ECS.Cluster(this, 'Cluster', {
+		this.cluster = new ECS.Cluster(this, 'Cluster', {
 			vpc: vpc,
 		})
 
-		const runNatTestServerTask = new ECS.FargateTaskDefinition(
+		const runNatTestServerTaskDefinition = new ECS.FargateTaskDefinition(
 			this,
 			'RunNatTestServer',
 			{
@@ -62,7 +64,7 @@ export class CD extends CloudFormation.Resource {
 			},
 		)
 
-		const container = runNatTestServerTask.addContainer(
+		const container = runNatTestServerTaskDefinition.addContainer(
 			'NatTestServerContainer',
 			{
 				image: ECS.ContainerImage.fromEcrRepository(this.ecr),
@@ -82,9 +84,6 @@ export class CD extends CloudFormation.Resource {
 			},
 		)
 		container.addPortMappings({
-			containerPort: 22,
-		})
-		container.addPortMappings({
 			containerPort: 3051,
 		})
 		container.addPortMappings({
@@ -98,18 +97,19 @@ export class CD extends CloudFormation.Resource {
 			description: 'Security group for NAT Test Server',
 		})
 		securityGroup.addIngressRule(EC2.Peer.anyIpv4(), EC2.Port.allTcp())
-		securityGroup.addIngressRule(EC2.Peer.anyIpv6(), EC2.Port.allTcp())
-		securityGroup.addEgressRule(EC2.Peer.anyIpv4(), EC2.Port.allTcp())
-		securityGroup.addEgressRule(EC2.Peer.anyIpv6(), EC2.Port.allTcp())
+		securityGroup.addEgressRule(EC2.Peer.anyIpv4(), EC2.Port.tcp(3051))
+		securityGroup.addEgressRule(EC2.Peer.anyIpv4(), EC2.Port.udp(3050))
 
-		new ECS.FargateService(this, 'NatTestServerFargateService', {
-			cluster,
-			taskDefinition: runNatTestServerTask,
+		this.fargate = new ECS.FargateService(this, 'NatTestServerFargateService', {
+			cluster: this.cluster,
+			taskDefinition: runNatTestServerTaskDefinition,
 			securityGroup,
 			desiredCount: 1,
 			minHealthyPercent: 0,
 			maxHealthyPercent: 100,
 			assignPublicIp: true,
 		})
+
+		this.fargate.node.addDependency(vpc) // to circumvent "Network vpc-0a9d0d216f6a3b372 has some mapped public address(es). Please unmap those public address(es) before detaching the gateway."
 	}
 }
