@@ -26,12 +26,15 @@ import (
 )
 
 type Packet struct {
-	Operator string   `json:"op"`
-	IP       []string `json:"ip"`
-	CellId   int      `json:"cell_id"`
-	UEMode   int      `json:"ue_mode"`
-	ICCID    string   `json:"iccid"`
-	Interval int      `json:"interval"`
+	Operator  string   `json:"op"`
+	IP        []string `json:"ip"`
+	CellId    int      `json:"cell_id"`
+	UEMode    int      `json:"ue_mode"`
+	LTEMode   int      `json:"lte_mode"`
+	NBIotMode int      `json:"nbiot_mode"`
+	GPSMode   int      `json:"gps_mode"`
+	ICCID     string   `json:"iccid"`
+	Interval  int      `json:"interval"`
 }
 
 type SaveData struct {

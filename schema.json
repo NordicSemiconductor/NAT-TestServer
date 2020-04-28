@@ -22,6 +22,21 @@
       "minimum": 0,
       "maximum": 2
     },
+    "lte_mode": {
+      "type": "integer",
+      "minimum": 0,
+      "maximum": 1
+    },
+    "nbiot_mode": {
+      "type": "integer",
+      "minimum": 0,
+      "maximum": 1
+    },
+    "gps_mode": {
+      "type": "integer",
+      "minimum": 0,
+      "maximum": 1
+    },
     "iccid": {
       "type": "string",
       "pattern": "^89[0-9]{17}([0-9]|F)?$"
@@ -31,6 +46,13 @@
       "minimum": 1
     }
   },
-  "required": ["op", "ip", "cell_id", "ue_mode", "iccid", "interval"],
+  "required": [
+    "op",
+    "ip",
+    "cell_id",
+    "ue_mode",
+    "iccid",
+    "interval"
+  ],
   "additionalProperties": false
 }
