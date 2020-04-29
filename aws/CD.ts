@@ -6,9 +6,7 @@ import * as ECS from '@aws-cdk/aws-ecs'
 import * as S3 from '@aws-cdk/aws-s3'
 import * as Logs from '@aws-cdk/aws-logs'
 export class CD extends CloudFormation.Resource {
-	public readonly ecr: ECR.IRepository
-	public readonly accessKey: IAM.CfnAccessKey
-	public readonly fargate: ECS.IFargateService
+	public readonly fargateService: ECS.IFargateService
 	public readonly cluster: ECS.ICluster
 
 	public constructor(
@@ -17,27 +15,14 @@ export class CD extends CloudFormation.Resource {
 		{
 			bucket,
 			userAccessKey,
-		}: { bucket: S3.IBucket; userAccessKey: IAM.CfnAccessKey },
+			ecr,
+		}: {
+			bucket: S3.IBucket
+			userAccessKey: IAM.CfnAccessKey
+			ecr: ECR.IRepository
+		},
 	) {
 		super(parent, id)
-
-		this.ecr = new ECR.Repository(this, 'Repository')
-
-		const user = new IAM.User(this, 'user', {
-			userName: `${parent.stackName}-cd`,
-		})
-
-		user.addToPolicy(
-			new IAM.PolicyStatement({
-				resources: [this.ecr.repositoryArn, `${this.ecr.repositoryArn}/*`],
-				actions: ['ecr:*'],
-			}),
-		)
-
-		this.accessKey = new IAM.CfnAccessKey(this, 'cdAccessKey', {
-			userName: user.userName,
-			status: 'Active',
-		})
 
 		const vpc = new EC2.Vpc(this, 'VPC', {
 			cidr: '10.3.0.0/16',
@@ -72,7 +57,7 @@ export class CD extends CloudFormation.Resource {
 		const container = runNatTestServerTaskDefinition.addContainer(
 			'NatTestServerContainer',
 			{
-				image: ECS.ContainerImage.fromEcrRepository(this.ecr),
+				image: ECS.ContainerImage.fromEcrRepository(ecr),
 				environment: {
 					AWS_ACCESS_KEY_ID: userAccessKey.ref,
 					AWS_SECRET_ACCESS_KEY: userAccessKey.attrSecretAccessKey,
@@ -107,14 +92,18 @@ export class CD extends CloudFormation.Resource {
 		securityGroup.addIngressRule(EC2.Peer.anyIpv4(), EC2.Port.tcp(3051))
 		securityGroup.addIngressRule(EC2.Peer.anyIpv4(), EC2.Port.udp(3050))
 
-		this.fargate = new ECS.FargateService(this, 'NatTestServerFargateService', {
-			cluster: this.cluster,
-			taskDefinition: runNatTestServerTaskDefinition,
-			securityGroup,
-			desiredCount: 1,
-			minHealthyPercent: 0,
-			maxHealthyPercent: 100,
-			assignPublicIp: true,
-		})
+		this.fargateService = new ECS.FargateService(
+			this,
+			'NatTestServerFargateService',
+			{
+				cluster: this.cluster,
+				taskDefinition: runNatTestServerTaskDefinition,
+				securityGroup,
+				desiredCount: 1,
+				minHealthyPercent: 0,
+				maxHealthyPercent: 100,
+				assignPublicIp: true,
+			},
+		)
 	}
 }

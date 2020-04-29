@@ -64,8 +64,8 @@ jobs:
         run: |
           VERSION=${{ github.event.release.tag_name }}
           STACK_ID="${STACK_ID:-nat-test-resources}"
-          ECR_REPOSITORY_NAME=`aws cloudformation describe-stacks --stack-name $STACK_ID | jq -r '.Stacks[0].Outputs[] | select(.OutputKey == "cdEcrRepositoryName") | .OutputValue'`
-          ECR_REPOSITORY_URI=`aws cloudformation describe-stacks --stack-name $STACK_ID | jq -r '.Stacks[0].Outputs[] | select(.OutputKey == "cdEcrRepositoryUri") | .OutputValue'`
+          ECR_REPOSITORY_NAME=`aws cloudformation describe-stacks --stack-name ${STACK_ID}-ecr | jq -r '.Stacks[0].Outputs[] | select(.OutputKey == "cdEcrRepositoryName") | .OutputValue'`
+          ECR_REPOSITORY_URI=`aws cloudformation describe-stacks --stack-name ${STACK_ID}-ecr | jq -r '.Stacks[0].Outputs[] | select(.OutputKey == "cdEcrRepositoryUri") | .OutputValue'`
           aws ecr get-login-password --region ${AWS_REGION} | docker login --username AWS --password-stdin ${ECR_REPOSITORY_URI}
           docker tag nordicsemiconductor/nat-testserver:${{ github.event.release.tag_name }} ${ECR_REPOSITORY_URI}:latest
           docker tag nordicsemiconductor/nat-testserver:${{ github.event.release.tag_name }} ${ECR_REPOSITORY_URI}:${{ github.event.release.tag_name }}
@@ -74,6 +74,6 @@ jobs:
 
       - name: Deploy a new version of the server
         run: |
-          SERVICE_ID=`aws cloudformation describe-stacks --stack-name $STACK_ID | jq -r '.Stacks[0].Outputs[] | select(.OutputKey == "fargateArn") | .OutputValue'`
-          CLUSTER_NAME=`aws cloudformation describe-stacks --stack-name $STACK_ID | jq -r '.Stacks[0].Outputs[] | select(.OutputKey == "clusterArn") | .OutputValue'`
+          SERVICE_ID=`aws cloudformation describe-stacks --stack-name ${STACK_ID} | jq -r '.Stacks[0].Outputs[] | select(.OutputKey == "fargateServiceArn") | .OutputValue'`
+          CLUSTER_NAME=`aws cloudformation describe-stacks --stack-name ${STACK_ID} | jq -r '.Stacks[0].Outputs[] | select(.OutputKey == "clusterArn") | .OutputValue'`
           aws ecs update-service --service $SERVICE_ID --cluster $CLUSTER_NAME --force-new-deployment

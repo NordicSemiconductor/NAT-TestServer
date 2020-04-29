@@ -1,10 +1,15 @@
 import * as CloudFormation from '@aws-cdk/core'
 import * as IAM from '@aws-cdk/aws-iam'
 import * as S3 from '@aws-cdk/aws-s3'
+import * as ECR from '@aws-cdk/aws-ecr'
 import { CD } from './CD'
 
-export class NATTestResourcesStack extends CloudFormation.Stack {
-	public constructor(parent: CloudFormation.App, id: string) {
+export class ServerStack extends CloudFormation.Stack {
+	public constructor(
+		parent: CloudFormation.App,
+		id: string,
+		{ ecrRepositoryArn }: { ecrRepositoryArn: string },
+	) {
 		super(parent, id)
 
 		const bucket = new S3.Bucket(this, 'bucket', {
@@ -47,31 +52,12 @@ export class NATTestResourcesStack extends CloudFormation.Stack {
 		const cd = new CD(this, 'CD', {
 			bucket,
 			userAccessKey: accessKey,
+			ecr: ECR.Repository.fromRepositoryArn(this, 'ecr', ecrRepositoryArn),
 		})
 
-		new CloudFormation.CfnOutput(this, 'cdAccessKeyId', {
-			value: cd.accessKey.ref,
-			exportName: `${this.stackName}:cdAccessKeyId`,
-		})
-
-		new CloudFormation.CfnOutput(this, 'cdSecretAccessKey', {
-			value: cd.accessKey.getAtt('SecretAccessKey').toString(),
-			exportName: `${this.stackName}:cdSecretAccessKey`,
-		})
-
-		new CloudFormation.CfnOutput(this, 'cdEcrRepositoryName', {
-			value: cd.ecr.repositoryName,
-			exportName: `${this.stackName}:cdEcrRepositoryName`,
-		})
-
-		new CloudFormation.CfnOutput(this, 'cdEcrRepositoryUri', {
-			value: cd.ecr.repositoryUri,
-			exportName: `${this.stackName}:cdEcrRepositoryUri`,
-		})
-
-		new CloudFormation.CfnOutput(this, 'fargateArn', {
-			value: cd.fargate.serviceArn,
-			exportName: `${this.stackName}:fargateArn`,
+		new CloudFormation.CfnOutput(this, 'fargateServiceArn', {
+			value: cd.fargateService.serviceArn,
+			exportName: `${this.stackName}:fargateServiceArn`,
 		})
 
 		new CloudFormation.CfnOutput(this, 'clusterArn', {

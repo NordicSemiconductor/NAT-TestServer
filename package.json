@@ -28,6 +28,7 @@
     "@commitlint/config-angular": "^8.3.4",
     "@types/node": "^13.13.4",
     "aws-cdk": "^1.36.0",
+    "aws-sdk": "^2.665.0",
     "husky": "^4.2.5",
     "lint-staged": "^10.2.0",
     "prettier": "^2.0.5",
