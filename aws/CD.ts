@@ -40,13 +40,18 @@ export class CD extends CloudFormation.Resource {
 		})
 
 		const vpc = new EC2.Vpc(this, 'VPC', {
-			cidr: '10.3.0.0/21',
+			cidr: '10.3.0.0/16',
 			maxAzs: 2,
 			subnetConfiguration: [
 				{
 					subnetType: EC2.SubnetType.PUBLIC,
-					name: 'Ingress',
-					cidrMask: 24,
+					name: 'PublicSubnetOne',
+					cidrMask: 25,
+				},
+				{
+					subnetType: EC2.SubnetType.PUBLIC,
+					name: 'PublicSubnetTwo',
+					cidrMask: 25,
 				},
 			],
 		})
@@ -81,6 +86,8 @@ export class CD extends CloudFormation.Resource {
 					streamPrefix: 'NatTestServer',
 					logRetention: Logs.RetentionDays.ONE_WEEK,
 				}),
+				essential: true,
+				readonlyRootFilesystem: true,
 			},
 		)
 		container.addPortMappings({
@@ -96,9 +103,9 @@ export class CD extends CloudFormation.Resource {
 			allowAllOutbound: true,
 			description: 'Security group for NAT Test Server',
 		})
-		securityGroup.addIngressRule(EC2.Peer.anyIpv4(), EC2.Port.allTcp())
-		securityGroup.addEgressRule(EC2.Peer.anyIpv4(), EC2.Port.tcp(3051))
-		securityGroup.addEgressRule(EC2.Peer.anyIpv4(), EC2.Port.udp(3050))
+		securityGroup.addEgressRule(EC2.Peer.anyIpv4(), EC2.Port.allTcp())
+		securityGroup.addIngressRule(EC2.Peer.anyIpv4(), EC2.Port.tcp(3051))
+		securityGroup.addIngressRule(EC2.Peer.anyIpv4(), EC2.Port.udp(3050))
 
 		this.fargate = new ECS.FargateService(this, 'NatTestServerFargateService', {
 			cluster: this.cluster,
@@ -109,7 +116,5 @@ export class CD extends CloudFormation.Resource {
 			maxHealthyPercent: 100,
 			assignPublicIp: true,
 		})
-
-		this.fargate.node.addDependency(vpc) // to circumvent "Network vpc-0a9d0d216f6a3b372 has some mapped public address(es). Please unmap those public address(es) before detaching the gateway."
 	}
 }
