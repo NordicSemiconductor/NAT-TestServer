@@ -14,7 +14,6 @@ Make these environment variable available:
 > ℹ️ Linux users can use [direnv](https://direnv.net/) to simplify the process.
 
     export AWS_REGION=<...>
-    export AWS_REGION=<...>
     export AWS_BUCKET=<...>
     export AWS_ACCESS_KEY_ID=<...>
     export AWS_SECRET_ACCESS_KEY=<...>
@@ -49,8 +48,40 @@ or add the `-v` option for more detailed output.
 
 ## Continuous Deployment
 
+Install dependencies
+
+    npm ci
+
+Deploy the stack to an AWS account
+
+    npx cdk deploy
+
+Publish the docker image to AWS Elastic Container Registry
+
     export STACK_ID="${STACK_ID:-nat-test-resources}"
     ECR_REPOSITORY_NAME=`aws cloudformation describe-stacks --stack-name $STACK_ID | jq -r '.Stacks[0].Outputs[] | select(.OutputKey == "cdEcrRepositoryName") | .OutputValue'`
     ECR_REPOSITORY_URI=`aws cloudformation describe-stacks --stack-name $STACK_ID | jq -r '.Stacks[0].Outputs[] | select(.OutputKey == "cdEcrRepositoryUri") | .OutputValue'`
+    aws ecr get-login-password --region ${AWS_REGION} | docker login --username AWS --password-stdin ${ECR_REPOSITORY_URI}
     docker tag nordicsemiconductor/nat-testserver:latest ${ECR_REPOSITORY_URI}:latest
     docker push ${ECR_REPOSITORY_URI}:latest
+
+### Public IP
+
+Currently there is no Load Balancer in front of the server, so the public IP
+needs to be manually updated in the DNS record used by the firmware.
+
+The IP can be extracted using:
+
+    CLUSTER_NAME=`aws cloudformation describe-stacks --stack-name $STACK_ID | jq -r '.Stacks[0].Outputs[] | select(.OutputKey == "clusterArn") | .OutputValue'`
+    TASK_ARN=`aws ecs list-tasks --cluster $CLUSTER_NAME | jq -r '.taskArns[0]'`
+    NETWORK_INTERFACE_ID=`aws ecs describe-tasks --task $TASK_ARN --cluster $CLUSTER_NAME | jq -r '.tasks[0].attachments[0].details[] | select(.name == "networkInterfaceId") | .value'`
+    PUBLIC_IP=`aws ec2 describe-network-interfaces --network-interface-id $NETWORK_INTERFACE_ID | jq -r '.NetworkInterfaces[0].Association.PublicIp'`
+    echo Public IP: $PUBLIC_IP
+
+### Deploying a new version of the server
+
+Publish a new version of the image to ECR (see above), then
+
+    SERVICE_ID=`aws cloudformation describe-stacks --stack-name $STACK_ID | jq -r '.Stacks[0].Outputs[] | select(.OutputKey == "fargateArn") | .OutputValue'`
+    CLUSTER_NAME=`aws cloudformation describe-stacks --stack-name $STACK_ID | jq -r '.Stacks[0].Outputs[] | select(.OutputKey == "clusterArn") | .OutputValue'`
+    aws ecs update-service --service $SERVICE_ID --cluster $CLUSTER_NAME --force-new-deployment
