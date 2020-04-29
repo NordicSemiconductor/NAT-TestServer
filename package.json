@@ -31,6 +31,7 @@
     "husky": "^4.2.5",
     "lint-staged": "^10.2.0",
     "prettier": "^2.0.5",
+    "semantic-release": "^17.0.7",
     "typescript": "^3.8.3"
   },
   "husky": {
@@ -49,6 +50,17 @@
     ],
     "*.go": [
       "gofmt -w"
+    ]
+  },
+  "release": {
+    "branches": [
+      "saga"
+    ],
+    "remoteTags": true,
+    "plugins": [
+      "@semantic-release/commit-analyzer",
+      "@semantic-release/release-notes-generator",
+      "@semantic-release/github"
     ]
   }
 }
