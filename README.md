@@ -13,7 +13,7 @@ Make these environment variable available:
 
 > ℹ️ Linux users can use [direnv](https://direnv.net/) to simplify the process.
 
-    export AWS_REGION=<...>
+    export AWS_DEFAULT_REGION=<...>
     export AWS_BUCKET=<...>
     export AWS_ACCESS_KEY_ID=<...>
     export AWS_SECRET_ACCESS_KEY=<...>
@@ -38,7 +38,7 @@ or add the `-v` option for more detailed output.
     docker build -t nordicsemiconductor/nat-testserver .
     docker run \
         -e AWS_BUCKET \
-        -e AWS_REGION \
+        -e AWS_DEFAULT_REGION \
         -e AWS_ACCESS_KEY_ID \
         -e AWS_SECRET_ACCESS_KEY \
         --rm --net=host -P nordicsemiconductor/nat-testserver:latest
