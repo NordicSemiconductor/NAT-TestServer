@@ -72,6 +72,7 @@ var dcBuffer []byte = []byte("Error occured.\nConnection closed.\n")
 var saveChan chan SaveRoutineStruct
 var schemaLoader gojsonschema.JSONLoader
 var SafeUDPClients SafeUDPClientList
+var Version string = "0.0.0-development"
 
 func SaveRoutine(prefix string) {
 	awsBucket := os.Getenv("AWS_BUCKET")
@@ -305,7 +306,7 @@ func main() {
 	logPrefix := os.Getenv("LOG_PREFIX")
 	go SaveRoutine(logPrefix)
 
-	log.Printf("NAT Test Server started.\n")
+	log.Printf("NAT Test Server %s started.\n", Version)
 	log.Printf("TCP Port:       %d\n", TCPport)
 	log.Printf("UDP Port:       %d\n", UDPport)
 	log.Printf("AWS Bucket:     %s\n", os.Getenv("AWS_BUCKET"))

@@ -17,17 +17,22 @@
   },
   "homepage": "https://github.com/NordicSemiconductor/NAT-TestServer#readme",
   "devDependencies": {
-    "@aws-cdk/aws-iam": "^1.34.1",
-    "@aws-cdk/aws-s3": "^1.34.1",
-    "@aws-cdk/core": "^1.34.1",
-    "@bifravst/code-style": "^7.1.4",
+    "@aws-cdk/aws-ec2": "^1.36.0",
+    "@aws-cdk/aws-ecr": "^1.36.0",
+    "@aws-cdk/aws-ecs": "^1.36.0",
+    "@aws-cdk/aws-iam": "^1.36.0",
+    "@aws-cdk/aws-s3": "^1.36.0",
+    "@aws-cdk/core": "^1.36.0",
+    "@bifravst/code-style": "^7.1.8",
     "@commitlint/cli": "^8.3.5",
     "@commitlint/config-angular": "^8.3.4",
-    "@types/node": "^13.13.2",
-    "aws-cdk": "^1.34.1",
+    "@types/node": "^13.13.4",
+    "aws-cdk": "^1.36.0",
+    "aws-sdk": "^2.665.0",
     "husky": "^4.2.5",
-    "lint-staged": "^10.1.7",
+    "lint-staged": "^10.2.0",
     "prettier": "^2.0.5",
+    "semantic-release": "^17.0.7",
     "typescript": "^3.8.3"
   },
   "husky": {
@@ -46,6 +51,17 @@
     ],
     "*.go": [
       "gofmt -w"
+    ]
+  },
+  "release": {
+    "branches": [
+      "saga"
+    ],
+    "remoteTags": true,
+    "plugins": [
+      "@semantic-release/commit-analyzer",
+      "@semantic-release/release-notes-generator",
+      "@semantic-release/github"
     ]
   }
 }
