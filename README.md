@@ -46,7 +46,7 @@ or add the `-v` option for more detailed output.
     # Send a package
     echo '{"op": "310410", "ip": ["10.160.1.82"], "cell_id": 84486415, "ue_mode": 2, "iccid": "8931080019073497795F", "interval":1}' | nc -w1 -u 127.0.0.1 3050
 
-## Continuous Deployment
+## Manual deployment
 
 Install dependencies
 
@@ -61,11 +61,29 @@ Publish the docker image to AWS Elastic Container Registry
     export STACK_ID="${STACK_ID:-nat-test-resources}"
     ECR_REPOSITORY_NAME=`aws cloudformation describe-stacks --stack-name $STACK_ID | jq -r '.Stacks[0].Outputs[] | select(.OutputKey == "cdEcrRepositoryName") | .OutputValue'`
     ECR_REPOSITORY_URI=`aws cloudformation describe-stacks --stack-name $STACK_ID | jq -r '.Stacks[0].Outputs[] | select(.OutputKey == "cdEcrRepositoryUri") | .OutputValue'`
-    aws ecr get-login-password --region ${AWS_REGION} | docker login --username AWS --password-stdin ${ECR_REPOSITORY_URI}
+    aws ecr get-login-password --region ${AWS_DEFAULT_REGION} | docker login --username AWS --password-stdin ${ECR_REPOSITORY_URI}
     docker tag nordicsemiconductor/nat-testserver:latest ${ECR_REPOSITORY_URI}:latest
     docker push ${ECR_REPOSITORY_URI}:latest
 
-### Public IP
+## Continuous Deployment
+
+Continuous Deployment of releases is done
+[through GitHub Actions](.github/workflows/cd.yaml). Configure these secrets:
+
+- `CD_AWS_DEFAULT_REGION`: Region where the stack is deployed
+- `CD_AWS_ACCESS_KEY_ID`: Access key ID for the CD user
+- `CD_AWS_SECRET_ACCESS_KEY`: Secret access key for the CD user
+
+### Deploying a new version of the server
+
+Publish a new version of the image to ECR (see above), then trigger a new
+deployment:
+
+    SERVICE_ID=`aws cloudformation describe-stacks --stack-name $STACK_ID | jq -r '.Stacks[0].Outputs[] | select(.OutputKey == "fargateArn") | .OutputValue'`
+    CLUSTER_NAME=`aws cloudformation describe-stacks --stack-name $STACK_ID | jq -r '.Stacks[0].Outputs[] | select(.OutputKey == "clusterArn") | .OutputValue'`
+    aws ecs update-service --service $SERVICE_ID --cluster $CLUSTER_NAME --force-new-deployment
+
+## Public IP
 
 Currently there is no Load Balancer in front of the server, so the public IP
 needs to be manually updated in the DNS record used by the firmware.
@@ -77,11 +95,3 @@ The IP can be extracted using:
     NETWORK_INTERFACE_ID=`aws ecs describe-tasks --task $TASK_ARN --cluster $CLUSTER_NAME | jq -r '.tasks[0].attachments[0].details[] | select(.name == "networkInterfaceId") | .value'`
     PUBLIC_IP=`aws ec2 describe-network-interfaces --network-interface-id $NETWORK_INTERFACE_ID | jq -r '.NetworkInterfaces[0].Association.PublicIp'`
     echo Public IP: $PUBLIC_IP
-
-### Deploying a new version of the server
-
-Publish a new version of the image to ECR (see above), then
-
-    SERVICE_ID=`aws cloudformation describe-stacks --stack-name $STACK_ID | jq -r '.Stacks[0].Outputs[] | select(.OutputKey == "fargateArn") | .OutputValue'`
-    CLUSTER_NAME=`aws cloudformation describe-stacks --stack-name $STACK_ID | jq -r '.Stacks[0].Outputs[] | select(.OutputKey == "clusterArn") | .OutputValue'`
-    aws ecs update-service --service $SERVICE_ID --cluster $CLUSTER_NAME --force-new-deployment
