@@ -76,7 +76,7 @@ export class CD extends CloudFormation.Resource {
 				environment: {
 					AWS_ACCESS_KEY_ID: userAccessKey.ref,
 					AWS_SECRET_ACCESS_KEY: userAccessKey.attrSecretAccessKey,
-					AWS_DEFAULT_REGION: parent.region,
+					AWS_REGION: parent.region,
 					AWS_BUCKET: bucket.bucketName,
 				},
 				cpu: 256,

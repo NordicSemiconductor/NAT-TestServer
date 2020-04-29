@@ -313,7 +313,7 @@ func main() {
 	if len(logPrefix) > 0 {
 		log.Printf("Log prefix:     %s\n", logPrefix)
 	}
-	log.Printf("AWS Region:     %s\n", os.Getenv("AWS_DEFAULT_REGION"))
+	log.Printf("AWS Region:     %s\n", os.Getenv("AWS_REGION"))
 	log.Printf("AWS Access Key: %s\n", os.Getenv("AWS_ACCESS_KEY_ID"))
 
 	<-done

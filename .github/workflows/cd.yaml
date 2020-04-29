@@ -2,7 +2,7 @@ name: Deploy
 
 env:
   GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-  AWS_DEFAULT_REGION: eu-central-1
+  AWS_REGION: eu-central-1
   AWS_ACCESS_KEY_ID: ${{ secrets.CD_AWS_ACCESS_KEY_ID }}
   AWS_SECRET_ACCESS_KEY: ${{ secrets.CD_AWS_SECRET_ACCESS_KEY }}
 
@@ -66,7 +66,7 @@ jobs:
           STACK_ID="${STACK_ID:-nat-test-resources}"
           ECR_REPOSITORY_NAME=`aws cloudformation describe-stacks --stack-name $STACK_ID | jq -r '.Stacks[0].Outputs[] | select(.OutputKey == "cdEcrRepositoryName") | .OutputValue'`
           ECR_REPOSITORY_URI=`aws cloudformation describe-stacks --stack-name $STACK_ID | jq -r '.Stacks[0].Outputs[] | select(.OutputKey == "cdEcrRepositoryUri") | .OutputValue'`
-          aws ecr get-login-password --region ${AWS_DEFAULT_REGION} | docker login --username AWS --password-stdin ${ECR_REPOSITORY_URI}
+          aws ecr get-login-password --region ${AWS_REGION} | docker login --username AWS --password-stdin ${ECR_REPOSITORY_URI}
           docker tag nordicsemiconductor/nat-testserver:${{ github.event.release.tag_name }} ${ECR_REPOSITORY_URI}:latest
           docker tag nordicsemiconductor/nat-testserver:${{ github.event.release.tag_name }} ${ECR_REPOSITORY_URI}:${{ github.event.release.tag_name }}
           docker push ${ECR_REPOSITORY_URI}:latest

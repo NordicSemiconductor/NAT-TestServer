@@ -13,7 +13,7 @@ Make these environment variable available:
 
 > ℹ️ Linux users can use [direnv](https://direnv.net/) to simplify the process.
 
-    export AWS_DEFAULT_REGION=<...>
+    export AWS_REGION=<...>
     export AWS_BUCKET=<...>
     export AWS_ACCESS_KEY_ID=<...>
     export AWS_SECRET_ACCESS_KEY=<...>
@@ -38,7 +38,7 @@ or add the `-v` option for more detailed output.
     docker build -t nordicsemiconductor/nat-testserver .
     docker run \
         -e AWS_BUCKET \
-        -e AWS_DEFAULT_REGION \
+        -e AWS_REGION \
         -e AWS_ACCESS_KEY_ID \
         -e AWS_SECRET_ACCESS_KEY \
         --rm --net=host -P nordicsemiconductor/nat-testserver:latest
@@ -61,7 +61,7 @@ Publish the docker image to AWS Elastic Container Registry
     export STACK_ID="${STACK_ID:-nat-test-resources}"
     ECR_REPOSITORY_NAME=`aws cloudformation describe-stacks --stack-name $STACK_ID | jq -r '.Stacks[0].Outputs[] | select(.OutputKey == "cdEcrRepositoryName") | .OutputValue'`
     ECR_REPOSITORY_URI=`aws cloudformation describe-stacks --stack-name $STACK_ID | jq -r '.Stacks[0].Outputs[] | select(.OutputKey == "cdEcrRepositoryUri") | .OutputValue'`
-    aws ecr get-login-password --region ${AWS_DEFAULT_REGION} | docker login --username AWS --password-stdin ${ECR_REPOSITORY_URI}
+    aws ecr get-login-password --region ${AWS_REGION} | docker login --username AWS --password-stdin ${ECR_REPOSITORY_URI}
     docker tag nordicsemiconductor/nat-testserver:latest ${ECR_REPOSITORY_URI}:latest
     docker push ${ECR_REPOSITORY_URI}:latest
 
@@ -70,7 +70,7 @@ Publish the docker image to AWS Elastic Container Registry
 Continuous Deployment of releases is done
 [through GitHub Actions](.github/workflows/cd.yaml). Configure these secrets:
 
-- `CD_AWS_DEFAULT_REGION`: Region where the stack is deployed
+- `CD_AWS_REGION`: Region where the stack is deployed
 - `CD_AWS_ACCESS_KEY_ID`: Access key ID for the CD user
 - `CD_AWS_SECRET_ACCESS_KEY`: Secret access key for the CD user
 
