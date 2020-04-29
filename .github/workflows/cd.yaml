@@ -1,14 +1,14 @@
 name: Deploy
 
+on:
+  release:
+    types: [published]
+
 env:
   GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
   AWS_REGION: eu-central-1
   AWS_ACCESS_KEY_ID: ${{ secrets.CD_AWS_ACCESS_KEY_ID }}
   AWS_SECRET_ACCESS_KEY: ${{ secrets.CD_AWS_SECRET_ACCESS_KEY }}
-
-on:
-  release:
-    types: [published]
 
 jobs:
   deploy:
