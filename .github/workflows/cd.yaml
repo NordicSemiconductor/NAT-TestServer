@@ -1,0 +1,79 @@
+name: Deploy
+
+env:
+  GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+  AWS_DEFAULT_REGION: ${{ secrets.CD_AWS_REGION }}
+  AWS_SECRET_ACCESS_KEY: ${{ secrets.CD_AWS_SECRET_ACCESS_KEY }}
+  AWS_ACCESS_KEY_ID: ${{ secrets.CD_AWS_ACCESS_KEY_ID }}
+
+on:
+  release:
+    types: [published]
+
+jobs:
+  deploy:
+    name: Deploy
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/setup-go@v1
+        with:
+          go-version: 1.14
+
+      - uses: actions/setup-node@v1
+        with:
+          node-version: "12.x"
+
+      - name: Cache AWS CLI
+        id: cache-aws-cli-linux
+        uses: actions/cache@v1
+        with:
+          path: aws/
+          key: ${{ runner.OS }}-cache-aws-cli
+
+      - name: Install AWS CLI
+        if: steps.cache-aws-cli-linux.outputs.cache-hit != 'true'
+        run: |
+          curl "https://awscli.amazonaws.com/awscli-exe-linux-x86_64.zip" -o "awscliv2.zip"
+          unzip awscliv2.zip
+          sudo ./aws/install
+
+      - uses: actions/checkout@v2
+
+      - name: Build Docker image
+        run: |
+          docker build --build-arg VERSION=${{ github.event.release.tag_name }} \
+            -t nordicsemiconductor/nat-testserver:${{ github.event.release.tag_name }} .
+
+      - name: Keep npm cache around to speed up installs
+        uses: actions/cache@v1
+        with:
+          path: ~/.npm
+          key: ${{ runner.OS }}-build-${{ hashFiles('**/package-lock.json') }}
+          restore-keys: |
+            ${{ runner.OS }}-build-${{ env.cache-name }}-
+            ${{ runner.OS }}-build-
+            ${{ runner.OS }}-
+
+      - name: Install dependencies
+        run: npm ci --no-audit
+
+      - name: Deploy the stack to an AWS account
+        run: npx cdk deploy
+
+      - name: Publish the docker image to AWS Elastic Container Registry
+        run: |
+          VERSION=${{ github.event.release.tag_name }}
+          STACK_ID="${STACK_ID:-nat-test-resources}"
+          ECR_REPOSITORY_NAME=`aws cloudformation describe-stacks --stack-name $STACK_ID | jq -r '.Stacks[0].Outputs[] | select(.OutputKey == "cdEcrRepositoryName") | .OutputValue'`
+          ECR_REPOSITORY_URI=`aws cloudformation describe-stacks --stack-name $STACK_ID | jq -r '.Stacks[0].Outputs[] | select(.OutputKey == "cdEcrRepositoryUri") | .OutputValue'`
+          aws ecr get-login-password --region ${AWS_REGION} | docker login --username AWS --password-stdin ${ECR_REPOSITORY_URI}
+          docker tag nordicsemiconductor/nat-testserver:${{ github.event.release.tag_name }} ${ECR_REPOSITORY_URI}:latest
+          docker tag nordicsemiconductor/nat-testserver:${{ github.event.release.tag_name }} ${ECR_REPOSITORY_URI}:${{ github.event.release.tag_name }}
+          docker push ${ECR_REPOSITORY_URI}:latest
+          docker push ${ECR_REPOSITORY_URI}:${{ github.event.release.tag_name }}
+
+      - name: Deploy a new version of the server
+        run: |
+          SERVICE_ID=`aws cloudformation describe-stacks --stack-name $STACK_ID | jq -r '.Stacks[0].Outputs[] | select(.OutputKey == "fargateArn") | .OutputValue'`
+          CLUSTER_NAME=`aws cloudformation describe-stacks --stack-name $STACK_ID | jq -r '.Stacks[0].Outputs[] | select(.OutputKey == "clusterArn") | .OutputValue'`
+          aws ecs update-service --service $SERVICE_ID --cluster $CLUSTER_NAME --force-new-deployment
