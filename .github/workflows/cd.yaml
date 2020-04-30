@@ -1,8 +1,6 @@
 name: Deploy
 
-on:
-  release:
-    types: [published]
+on: repository_dispatch
 
 env:
   GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -41,8 +39,9 @@ jobs:
 
       - name: Build Docker image
         run: |
-          docker build --build-arg VERSION=${{ github.event.release.tag_name }} \
-            -t nordicsemiconductor/nat-testserver:${{ github.event.release.tag_name }} .
+          TAG=`git tag --contains ${{ github.event.repository_dispatch.sha }} | tr -d '\n'`
+          docker build --build-arg VERSION=${{ github.event.repository_dispatch.sha }} \
+            -t nordicsemiconductor/nat-testserver:${TAG} .
 
       - name: Keep npm cache around to speed up installs
         uses: actions/cache@v1
@@ -62,15 +61,15 @@ jobs:
 
       - name: Publish the docker image to AWS Elastic Container Registry
         run: |
-          VERSION=${{ github.event.release.tag_name }}
+          TAG=`git tag --contains ${{ github.event.repository_dispatch.sha }} | tr -d '\n'`
           STACK_ID="${STACK_ID:-nat-test-resources}"
           ECR_REPOSITORY_NAME=`aws cloudformation describe-stacks --stack-name ${STACK_ID}-ecr | jq -r '.Stacks[0].Outputs[] | select(.OutputKey == "cdEcrRepositoryName") | .OutputValue'`
           ECR_REPOSITORY_URI=`aws cloudformation describe-stacks --stack-name ${STACK_ID}-ecr | jq -r '.Stacks[0].Outputs[] | select(.OutputKey == "cdEcrRepositoryUri") | .OutputValue'`
           aws ecr get-login-password --region ${AWS_REGION} | docker login --username AWS --password-stdin ${ECR_REPOSITORY_URI}
-          docker tag nordicsemiconductor/nat-testserver:${{ github.event.release.tag_name }} ${ECR_REPOSITORY_URI}:latest
-          docker tag nordicsemiconductor/nat-testserver:${{ github.event.release.tag_name }} ${ECR_REPOSITORY_URI}:${{ github.event.release.tag_name }}
+          docker tag nordicsemiconductor/nat-testserver:${TAG} ${ECR_REPOSITORY_URI}:latest
+          docker tag nordicsemiconductor/nat-testserver:${TAG} ${ECR_REPOSITORY_URI}:${TAG}
           docker push ${ECR_REPOSITORY_URI}:latest
-          docker push ${ECR_REPOSITORY_URI}:${{ github.event.release.tag_name }}
+          docker push ${ECR_REPOSITORY_URI}:${TAG}
 
       - name: Deploy a new version of the server
         run: |
