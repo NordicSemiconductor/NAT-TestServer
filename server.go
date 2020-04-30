@@ -74,8 +74,7 @@ var schemaLoader gojsonschema.JSONLoader
 var SafeUDPClients SafeUDPClientList
 var Version string = "0.0.0-development"
 
-func SaveRoutine(prefix string) {
-	awsBucket := os.Getenv("AWS_BUCKET")
+func SaveRoutine(awsBucket string, prefix string) {
 	sess, err := session.NewSession(&aws.Config{})
 	if err != nil {
 		log.Fatal("Error creating session ", err)
@@ -279,6 +278,23 @@ func AcceptTCP(l net.Listener) {
 }
 
 func main() {
+	awsBucket := os.Getenv("AWS_BUCKET")
+	awsRegion := os.Getenv("AWS_REGION")
+	awsAccessKeyId := os.Getenv("AWS_ACCESS_KEY_ID")
+	awsSecretAccessKey := os.Getenv("AWS_SECRET_ACCESS_KEY")
+	if len(awsBucket) == 0 {
+		log.Fatal("AWS_BUCKET not defined")
+	}
+	if len(awsRegion) == 0 {
+		log.Fatal("AWS_REGION not defined")
+	}
+	if len(awsAccessKeyId) == 0 {
+		log.Fatal("AWS_ACCESS_KEY_ID not defined")
+	}
+	if len(awsSecretAccessKey) == 0 {
+		log.Fatal("AWS_SECRET_ACCESS_KEY not defined")
+	}
+
 	done := make(chan bool)
 	saveChan = make(chan SaveRoutineStruct)
 	SafeUDPClients = SafeUDPClientList{ClientList: list.New()}
@@ -304,7 +320,7 @@ func main() {
 	go AcceptTCP(l)
 
 	logPrefix := os.Getenv("LOG_PREFIX")
-	go SaveRoutine(logPrefix)
+	go SaveRoutine(awsBucket, logPrefix)
 
 	log.Printf("NAT Test Server %s started.\n", Version)
 	log.Printf("TCP Port:       %d\n", TCPport)
