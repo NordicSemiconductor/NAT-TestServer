@@ -75,6 +75,7 @@ jobs:
 
       - name: Deploy a new version of the server
         run: |
+          STACK_ID="${STACK_ID:-nat-test-resources}"
           SERVICE_ID=`aws cloudformation describe-stacks --stack-name ${STACK_ID} | jq -r '.Stacks[0].Outputs[] | select(.OutputKey == "fargateServiceArn") | .OutputValue'`
           CLUSTER_NAME=`aws cloudformation describe-stacks --stack-name ${STACK_ID} | jq -r '.Stacks[0].Outputs[] | select(.OutputKey == "clusterArn") | .OutputValue'`
           aws ecs update-service --service $SERVICE_ID --cluster $CLUSTER_NAME --force-new-deployment
