@@ -278,6 +278,8 @@ func AcceptTCP(l net.Listener) {
 }
 
 func main() {
+	log.SetFlags(0) // Do not prefix with date, this is handled by the operating system
+
 	awsBucket := os.Getenv("AWS_BUCKET")
 	awsRegion := os.Getenv("AWS_REGION")
 	awsAccessKeyId := os.Getenv("AWS_ACCESS_KEY_ID")
