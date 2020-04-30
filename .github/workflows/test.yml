@@ -4,7 +4,7 @@ on:
   push:
 
 env:
-  GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+  GITHUB_TOKEN: ${{ secrets.USER_GITHUB_TOKEN_FOR_ACTION_TRIGGER }}
   AWS_BUCKET: ${{ secrets.AWS_BUCKET }}
   AWS_REGION: eu-central-1
   AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
