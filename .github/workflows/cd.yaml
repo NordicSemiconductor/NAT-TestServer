@@ -14,10 +14,13 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v2
+        with:
+          ref: ${{ github.event.client_payload.sha }}
+      - run: git fetch --depth=1 origin +refs/tags/*:refs/tags/*
 
       - name: Build Docker image
         run: |
-          TAG=`git ls-remote --tags origin | grep ${{ github.event.client_payload.sha }} | awk '{ print $2; }' | tr -d 'refs/tags/'  | tr -d '\n'`
+          TAG=`git tag --contains ${{ github.event.client_payload.sha }} | tr -d '\n'`
           docker build --build-arg VERSION=${TAG} \
             -t nordicsemiconductor/nat-testserver:${TAG} .
 
@@ -57,7 +60,7 @@ jobs:
 
       - name: Publish the docker image to AWS Elastic Container Registry
         run: |
-          TAG=`git ls-remote --tags origin | grep ${{ github.event.client_payload.sha }} | awk '{ print $2; }' | tr -d 'refs/tags/'  | tr -d '\n'`
+          TAG=`git tag --contains ${{ github.event.client_payload.sha }} | tr -d '\n'`
           STACK_ID="${STACK_ID:-nat-test-resources}"
           ECR_REPOSITORY_NAME=`aws cloudformation describe-stacks --stack-name ${STACK_ID}-ecr | jq -r '.Stacks[0].Outputs[] | select(.OutputKey == "cdEcrRepositoryName") | .OutputValue'`
           ECR_REPOSITORY_URI=`aws cloudformation describe-stacks --stack-name ${STACK_ID}-ecr | jq -r '.Stacks[0].Outputs[] | select(.OutputKey == "cdEcrRepositoryUri") | .OutputValue'`
