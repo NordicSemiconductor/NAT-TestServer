@@ -32,13 +32,16 @@ jobs:
 
       - name: Semantic release
         id: semantic-release
+        if: endsWith(github.ref, 'saga')
         continue-on-error: true
         run: |
           npx semantic-release
 
       - name: Trigger Deploy
         continue-on-error: true
-        if: steps.semantic-release.conclusion == 'success'
+        if:
+          endsWith(github.ref, 'saga') && steps.semantic-release.conclusion ==
+          'success'
         uses: octokit/request-action@v2.x
         with:
           route: POST /repos/:repository/dispatches

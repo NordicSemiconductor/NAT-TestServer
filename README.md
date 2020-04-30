@@ -8,7 +8,11 @@
 [![code style: prettier](https://img.shields.io/badge/code_style-prettier-ff69b4.svg)](https://github.com/prettier/prettier/)
 [![ESLint: TypeScript](https://img.shields.io/badge/ESLint-TypeScript-blue.svg)](https://github.com/typescript-eslint/typescript-eslint)
 
-## Configuration
+Receives NAT test messages from the
+[NAT Test Firmware](https://github.com/NordicSemiconductor/NAT-TestFirmware/)
+and logs them and timeout occurances to S3.
+
+## Testing
 
 Make these environment variable available:
 
@@ -18,12 +22,6 @@ Make these environment variable available:
     export AWS_BUCKET=<...>
     export AWS_ACCESS_KEY_ID=<...>
     export AWS_SECRET_ACCESS_KEY=<...>
-
-Receives NAT test messages from the
-[NAT Test Firmware](https://github.com/NordicSemiconductor/NAT-TestFirmware/)
-and logs them and timeout occurances to S3.
-
-## Testing
 
 To test if the server is listening on local ports and saves the correct data,
 execute the command
@@ -49,6 +47,79 @@ or add the `-v` option for more detailed output.
 
 ## Deploy to AWS
 
+### Note on the public IP
+
+Currently there is no Load Balancer in front of the server (after all this
+service was developed to test NAT timeouts on UDP and TCP connections, so we
+need to have the actual servers instance terminate the connection, not the load
+balancer).
+
+Therefore the public IP needs to be manually updated in the DNS record used by
+the firmware because there is no other way right now when using Fargate.
+
+For this there is a lambda function which listens to change events from the
+cluster in the _service account_ and updates a DNS record on a Route53 Hosted
+Zone which is in a separate _DNS account_. Unfortunately it is currently not
+possible to limit access to subdomains in a Hosted Zone.
+
+Prepare a role in the _domain account_ with these permissions, replace
+
+- `<Zone ID>` with the ID of your hosted zone.
+
+```json
+{
+  "Version": "2012-10-17",
+  "Statement": [
+    {
+      "Sid": "VisualEditor0",
+      "Effect": "Allow",
+      "Action": "route53:ChangeResourceRecordSets",
+      "Resource": "arn:aws:route53:::hostedzone/<Zone ID>"
+    }
+  ]
+}
+```
+
+Create a trust relationship for the _service account_, replace
+
+- `<Account ID of the service account>` with the account id of the _service
+  account_
+- `<External ID>` with a random string (e.g. use a UUIDv4)
+
+```json
+{
+  "Version": "2012-10-17",
+  "Statement": [
+    {
+      "Effect": "Allow",
+      "Principal": {
+        "AWS": "arn:aws:iam::<Account ID of the service account>:root"
+      },
+      "Action": "sts:AssumeRole",
+      "Condition": {
+        "StringEquals": {
+          "sts:ExternalId": "<External ID>"
+        }
+      }
+    }
+  ]
+}
+```
+
+### Deploy
+
+Make these environment variable available:
+
+> ℹ️ Linux users can use [direnv](https://direnv.net/) to simplify the process.
+
+    export AWS_REGION=<...>
+    export AWS_ACCESS_KEY_ID=<Access Key ID of the service account>
+    export AWS_SECRET_ACCESS_KEY=<Secret Access Key of the service account>
+    export STS_ROLE_ARN=<ARN of the role created in the domain account>
+    export STS_EXTERNAL_ID=<External ID from above>
+    export HOSTED_ZONE_ID=<Zone ID from above>
+    export RECORD_NAME=<FQDN of the A record to update>
+
 Install dependencies
 
     npm ci
@@ -56,6 +127,11 @@ Install dependencies
 Set the ID of the stack
 
     export STACK_ID="${STACK_ID:-nat-test-resources}"
+
+Prepare the account for CDK resources:
+
+    npx cdk -a 'node dist/cdk-sourcecode.js' deploy
+    npx cdk bootstrap
 
 Deploy the ECR stack to an AWS Account
 
@@ -81,8 +157,19 @@ Continuous Deployment of releases is done
 - `CD_AWS_REGION`: Region where the stack is deployed
 - `CD_AWS_ACCESS_KEY_ID`: Access key ID for the CD user
 - `CD_AWS_SECRET_ACCESS_KEY`: Secret access key for the CD user
+- `STS_ROLE_ARN`: ARN of the role created in the domain account
+- `STS_EXTERNAL_ID`: External ID from above
+- `HOSTED_ZONE_ID`: Zone ID from above
+- `RECORD_NAME`: FQDN of the A record to update
+- `USER_GITHUB_TOKEN_FOR_ACTION_TRIGGER`: In order to be able to trigger this
+  action, a GitHub user token with the permissions `public_repo`, `repo:status`,
+  `repo_deployment` is needed (the default Actions credentials
+  [can't trigger other Actions](https://help.github.com/en/actions/reference/events-that-trigger-workflows#triggering-new-workflows-using-a-personal-access-token)).
 
-### Deploying a new version of the server
+Afterwards the [Test Action](.github/workflows/test.yml) will trigger a
+deployment.
+
+## Deploying a new version of the server manually
 
 Publish a new version of the image to ECR (see above), then trigger a new
 deployment:
@@ -90,16 +177,3 @@ deployment:
     SERVICE_ID=`aws cloudformation describe-stacks --stack-name ${STACK_ID}-ecr | jq -r '.Stacks[0].Outputs[] | select(.OutputKey == "fargateServiceArn") | .OutputValue'`
     CLUSTER_NAME=`aws cloudformation describe-stacks --stack-name ${STACK_ID}-ecr | jq -r '.Stacks[0].Outputs[] | select(.OutputKey == "clusterArn") | .OutputValue'`
     aws ecs update-service --service $SERVICE_ID --cluster $CLUSTER_NAME --force-new-deployment
-
-## Public IP
-
-Currently there is no Load Balancer in front of the server, so the public IP
-needs to be manually updated in the DNS record used by the firmware.
-
-The IP can be extracted using:
-
-    CLUSTER_NAME=`aws cloudformation describe-stacks --stack-name $STACK_ID | jq -r '.Stacks[0].Outputs[] | select(.OutputKey == "clusterArn") | .OutputValue'`
-    TASK_ARN=`aws ecs list-tasks --cluster $CLUSTER_NAME | jq -r '.taskArns[0]'`
-    NETWORK_INTERFACE_ID=`aws ecs describe-tasks --task $TASK_ARN --cluster $CLUSTER_NAME | jq -r '.tasks[0].attachments[0].details[] | select(.name == "networkInterfaceId") | .value'`
-    PUBLIC_IP=`aws ec2 describe-network-interfaces --network-interface-id $NETWORK_INTERFACE_ID | jq -r '.NetworkInterfaces[0].Association.PublicIp'`
-    echo Public IP: $PUBLIC_IP

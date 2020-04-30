@@ -5,6 +5,12 @@ import * as EC2 from '@aws-cdk/aws-ec2'
 import * as ECS from '@aws-cdk/aws-ecs'
 import * as S3 from '@aws-cdk/aws-s3'
 import * as Logs from '@aws-cdk/aws-logs'
+import * as EventTargets from '@aws-cdk/aws-events-targets'
+import * as Events from '@aws-cdk/aws-events'
+import * as Lambda from '@aws-cdk/aws-lambda'
+import { Lambdas } from './prepare-resources'
+import { LayeredLambdas } from '@bifravst/package-layered-lambdas'
+import * as CloudWatchLogs from '@aws-cdk/aws-logs'
 export class CD extends CloudFormation.Resource {
 	public readonly fargateService: ECS.IFargateService
 	public readonly cluster: ECS.ICluster
@@ -16,10 +22,24 @@ export class CD extends CloudFormation.Resource {
 			bucket,
 			userAccessKey,
 			ecr,
+			sourceCodeBucket,
+			baseLayer,
+			lambdas,
+			updateDNSRoleArn,
+			assumeRoleExternalID,
+			hostedZoneId,
+			recordName,
 		}: {
 			bucket: S3.IBucket
 			userAccessKey: IAM.CfnAccessKey
 			ecr: ECR.IRepository
+			sourceCodeBucket: S3.IBucket
+			baseLayer: Lambda.ILayerVersion
+			lambdas: LayeredLambdas<Lambdas>
+			updateDNSRoleArn: string
+			assumeRoleExternalID: string
+			hostedZoneId: string
+			recordName: string
 		},
 	) {
 		super(parent, id)
@@ -105,5 +125,70 @@ export class CD extends CloudFormation.Resource {
 				assignPublicIp: true,
 			},
 		)
+
+		// Listen to Cluster Change messages and update the public IP
+		const updateDNS = new Lambda.Function(this, 'updateDNS', {
+			layers: [baseLayer],
+			handler: 'index.handler',
+			runtime: Lambda.Runtime.NODEJS_12_X,
+			timeout: CloudFormation.Duration.seconds(900),
+			memorySize: 1792,
+			code: Lambda.Code.bucket(
+				sourceCodeBucket,
+				lambdas.lambdaZipFileNames.updateDNS,
+			),
+			description:
+				'Updates the DNS record whenever the Fargate instance changes',
+			initialPolicy: [
+				new IAM.PolicyStatement({
+					resources: ['*'],
+					actions: [
+						'logs:CreateLogGroup',
+						'logs:CreateLogStream',
+						'logs:PutLogEvents',
+					],
+				}),
+				new IAM.PolicyStatement({
+					resources: [updateDNSRoleArn],
+					actions: ['sts:AssumeRole'],
+				}),
+				new IAM.PolicyStatement({
+					resources: ['*'],
+					actions: ['ec2:DescribeNetworkInterfaces'],
+				}),
+			],
+			environment: {
+				STS_ROLE_ARN: updateDNSRoleArn,
+				STS_EXTERNAL_ID: assumeRoleExternalID,
+				HOSTED_ZONE_ID: hostedZoneId,
+				RECORD_NAME: recordName,
+			},
+		})
+
+		new CloudWatchLogs.LogGroup(parent, `updateDNSLogGroup`, {
+			removalPolicy: CloudFormation.RemovalPolicy.DESTROY,
+			logGroupName: `/aws/lambda/${updateDNS.functionName}`,
+			retention: CloudWatchLogs.RetentionDays.ONE_WEEK,
+		})
+
+		const rule = new Events.Rule(this, 'invokeOnECSTaskStateChange', {
+			description:
+				'Triggers the update DNS lambda when a ECS Task State Change event occurs',
+			enabled: true,
+			eventPattern: {
+				detailType: ['ECS Task State Change'],
+				detail: {
+					clusterArn: [this.cluster.clusterArn],
+					desiredStatus: ['RUNNING'],
+					lastStatus: ['RUNNING'],
+				},
+			},
+			targets: [new EventTargets.LambdaFunction(updateDNS)],
+		})
+
+		updateDNS.addPermission('InvokeByEvents', {
+			principal: new IAM.ServicePrincipal('events.amazonaws.com'),
+			sourceArn: rule.ruleArn,
+		})
 	}
 }
