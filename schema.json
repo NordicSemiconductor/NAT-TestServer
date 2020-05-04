@@ -43,6 +43,11 @@
       "type": "string",
       "pattern": "^89[0-9]{17}([0-9]|F)?$"
     },
+    "imei": {
+      "description": "The device's unique international mobile equipment identity (IMEI)",
+      "type": "string",
+      "pattern": "^[0-9]{15}$"
+    },
     "interval": {
       "description": "Requested interval from receiving message until server should respond to the client",
       "type": "integer",
@@ -57,6 +62,7 @@
     "lte_mode",
     "nbiot_mode",
     "iccid",
+    "imei",
     "interval"
   ],
   "additionalProperties": false

@@ -33,6 +33,7 @@ type Packet struct {
 	LTEMode   int      `json:"lte_mode"`
 	NBIotMode int      `json:"nbiot_mode"`
 	ICCID     string   `json:"iccid"`
+	IMEI      string   `json:"imei"`
 	Interval  int      `json:"interval"`
 }
 
