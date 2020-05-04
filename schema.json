@@ -2,7 +2,7 @@
   "type": "object",
   "properties": {
     "op": {
-      "description": "Name of current network operator",
+      "description": "Name of the current network operator",
       "type": "string",
       "minLength": 5,
       "maxLength": 6
@@ -16,41 +16,35 @@
       }
     },
     "cell_id": {
-      "description": "Current E-UTRAN cell ID",
+      "description": "E-UTRAN cell ID of the currently connected LTE cell",
       "type": "integer",
       "minimum": 0
     },
     "ue_mode": {
-      "description": "UE mode of operation",
+      "description": "UE mode of operation. 0 = packed switched mode 2 operation, 2 = combined circuit-switched and packet-switched mode 2 operation",
       "type": "integer",
       "minimum": 0,
       "maximum": 2
     },
     "lte_mode": {
-      "description": "1 if LTE-M is supported",
+      "description": "1 if LTE-M is used for the current LTE connection",
       "type": "integer",
       "minimum": 0,
       "maximum": 1
     },
     "nbiot_mode": {
-      "description": "1 if NB-IoT is supported",
-      "type": "integer",
-      "minimum": 0,
-      "maximum": 1
-    },
-    "gps_mode": {
-      "description": "1 if GNSS is supported",
+      "description": "1 if NB-IoT is used for the current LTE connection",
       "type": "integer",
       "minimum": 0,
       "maximum": 1
     },
     "iccid": {
-      "description": "SIM ICCID",
+      "description": "The SIM card's unique integrated circuit card identifier (ICCID)",
       "type": "string",
       "pattern": "^89[0-9]{17}([0-9]|F)?$"
     },
     "interval": {
-      "description": "Seconds to wait before answering client",
+      "description": "Requested interval from receiving message until server should respond to the client",
       "type": "integer",
       "minimum": 1
     }
@@ -62,7 +56,6 @@
     "ue_mode",
     "lte_mode",
     "nbiot_mode",
-    "gps_mode",
     "iccid",
     "interval"
   ],

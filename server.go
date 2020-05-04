@@ -32,7 +32,6 @@ type Packet struct {
 	UEMode    int      `json:"ue_mode"`
 	LTEMode   int      `json:"lte_mode"`
 	NBIotMode int      `json:"nbiot_mode"`
-	GPSMode   int      `json:"gps_mode"`
 	ICCID     string   `json:"iccid"`
 	Interval  int      `json:"interval"`
 }
