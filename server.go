@@ -6,6 +6,15 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"log"
+	"net"
+	"os"
+	"path/filepath"
+	"strconv"
+	"strings"
+	"sync"
+	"time"
+
 	"github.com/aws/aws-sdk-go/aws"
 	"github.com/aws/aws-sdk-go/aws/awserr"
 	"github.com/aws/aws-sdk-go/aws/request"
@@ -13,19 +22,9 @@ import (
 	"github.com/aws/aws-sdk-go/service/s3"
 	"github.com/google/uuid"
 	"github.com/xeipuuv/gojsonschema"
-	"io"
-	"log"
-	"net"
-	"os"
-	"path/filepath"
-	"reflect"
-	"strconv"
-	"strings"
-	"sync"
-	"time"
 )
 
-type Packet struct {
+type DeviceMessage struct {
 	Operator  string   `json:"op"`
 	IP        []string `json:"ip"`
 	CellId    int      `json:"cell_id"`
@@ -37,17 +36,12 @@ type Packet struct {
 	Interval  int      `json:"interval"`
 }
 
-type SaveData struct {
-	Received string
-	Protocol string
-	IP       string
-	Timeout  bool
-	Data     Packet
-}
-
-type SaveRoutineStruct struct {
+type NATLogEntry struct {
+	Protocol  string
+	IP        string
+	Timeout   bool
 	Timestamp time.Time
-	Data      SaveData
+	Message   DeviceMessage
 }
 
 type UDPClient struct {
@@ -56,7 +50,7 @@ type UDPClient struct {
 	DoneChan chan bool
 }
 
-type SafeUDPClientList struct {
+type UDPClientList struct {
 	ClientList *list.List
 	Mux        sync.Mutex
 }
@@ -69,20 +63,20 @@ const schemaFile = "schema.json"
 const timeFormat = "2006-01-02T15:04:05.00-0700"
 
 var dcBuffer []byte = []byte("Error occured.\nConnection closed.\n")
-var saveChan chan SaveRoutineStruct
+var writeLog chan NATLogEntry
 var schemaLoader gojsonschema.JSONLoader
-var SafeUDPClients SafeUDPClientList
+var SafeUDPClients UDPClientList
 var Version string = "0.0.0-development"
 
-func SaveRoutine(awsBucket string, prefix string) {
+func saveLog(awsBucket string, prefix string) {
 	sess, err := session.NewSession(&aws.Config{})
 	if err != nil {
 		log.Fatal("Error creating session ", err)
 	}
 	svc := s3.New(sess, &aws.Config{})
 
-	for i := range saveChan {
-		buffer, err := json.Marshal(i.Data)
+	for i := range writeLog {
+		buffer, err := json.Marshal(i)
 		if err != nil {
 			log.Printf("JSON invalid. Cannot write to file, error: %d\n", err)
 			return
@@ -94,13 +88,12 @@ func SaveRoutine(awsBucket string, prefix string) {
 			return
 		}
 
-		key := fmt.Sprintf("%s/%s-%s-%s.json", i.Timestamp.Format("2006/01/02"), i.Data.IP, i.Timestamp.Format("150405"), newUUID)
+		key := fmt.Sprintf("%s/%s-%s-%s.json", i.Timestamp.Format("2006/01/02"), i.IP, i.Timestamp.Format("150405"), newUUID)
+		log.Printf("Uploading %s: %s", key, buffer)
 
 		ctx := context.Background()
 		var cancelFn func()
-		if newPacketTimeout > 0 {
-			ctx, cancelFn = context.WithTimeout(ctx, newPacketTimeout*time.Second)
-		}
+		ctx, cancelFn = context.WithTimeout(ctx, 60*time.Second)
 
 		go func() {
 			var Key = key
@@ -127,32 +120,30 @@ func SaveRoutine(awsBucket string, prefix string) {
 	}
 }
 
-func HandleData(buffer []byte, protocol string, addr string) ([]byte, SaveRoutineStruct, error) {
-	startTime := time.Now()
+func HandleData(buffer []byte, protocol string, addr string) ([]byte, NATLogEntry, error) {
+	timestamp := time.Now()
 
 	documentLoader := gojsonschema.NewStringLoader(string(buffer))
 	result, err := gojsonschema.Validate(schemaLoader, documentLoader)
 	if err != nil {
-		return nil, SaveRoutineStruct{}, err
+		return nil, NATLogEntry{}, err
 	} else if !result.Valid() {
-		return nil, SaveRoutineStruct{}, errors.New("Packet uses wrong format.\n")
+		return nil, NATLogEntry{}, errors.New("Message uses wrong format.\n")
 	}
 
-	log.Printf("%s Packet received from %s\n", protocol, addr)
+	log.Printf("%s Message received from %s\n", protocol, addr)
 
-	var packet Packet
-	err = json.Unmarshal(buffer, &packet)
+	var message DeviceMessage
+	err = json.Unmarshal(buffer, &message)
 	if err != nil {
-		return nil, SaveRoutineStruct{}, err
+		return nil, NATLogEntry{}, err
 	}
 
-	saveData := SaveRoutineStruct{Timestamp: startTime, Data: SaveData{Received: startTime.Format(timeFormat), Protocol: protocol, IP: addr, Timeout: false, Data: packet}}
-	saveChan <- saveData
-
-	time.Sleep(time.Duration(packet.Interval) * time.Second)
+	time.Sleep(time.Duration(message.Interval) * time.Second)
 
 	endTime := time.Now().Format(timeFormat)
-	retString := "Interval: " + strconv.Itoa(packet.Interval) + "\nReceived:" + startTime.Format(timeFormat) + "\nReturned: " + endTime + "\n"
+	retString := "Interval: " + strconv.Itoa(message.Interval) + "\nReturned: " + endTime + "\n"
+	saveData := NATLogEntry{Timestamp: timestamp, Protocol: protocol, IP: addr, Timeout: false, Message: message}
 	return []byte(retString), saveData, nil
 }
 
@@ -162,9 +153,7 @@ func HandleUDP(pc net.PacketConn, addr net.Addr, buffer []byte) {
 	retBuffer, recvData, err := HandleData(buffer, "UDP", addr.String())
 	if err != nil {
 		log.Printf("HandleData Error: %s\nConnection to %s terminated.\n", err.Error(), addr.String())
-		_, err = pc.WriteTo(dcBuffer, addr)
-		if err != nil {
-		}
+		pc.WriteTo(dcBuffer, addr)
 		return
 	}
 
@@ -173,6 +162,8 @@ func HandleUDP(pc net.PacketConn, addr net.Addr, buffer []byte) {
 	_, err = pc.WriteTo(retBuffer, addr)
 	if err != nil {
 		log.Printf("UDP write to %s failed, error: %s\n", addr.String(), err.Error())
+		recvData.Timeout = true
+		writeLog <- recvData
 		return
 	}
 	log.Printf("UDP Packet sent to %s\n", addr.String())
@@ -187,11 +178,11 @@ func HandleUDP(pc net.PacketConn, addr net.Addr, buffer []byte) {
 		SafeUDPClients.Mux.Lock()
 		SafeUDPClients.ClientList.Remove(clientRef)
 		SafeUDPClients.Mux.Unlock()
-
 		log.Printf("UDP connection to %s timed out. Connection terminated.\n", addr.String())
-		recvData.Data.Timeout = true
-		saveChan <- recvData
+		recvData.Timeout = true
+		writeLog <- recvData
 	case <-doneChan:
+		writeLog <- recvData
 		timer.Stop()
 	}
 }
@@ -210,43 +201,35 @@ func StopUDPClientTimeout(addr net.Addr) {
 }
 
 func HandleTCP(conn net.Conn) {
-	var recvData SaveRoutineStruct
+	var recvData NATLogEntry
 	for {
 		buffer := make([]byte, maxBufferSize)
 
 		n, err := conn.Read(buffer)
-		if err == io.EOF && !reflect.DeepEqual(recvData, SaveRoutineStruct{}) {
-			log.Printf("TCP connection to %s timed out. Connection terminated.\n", conn.RemoteAddr().String())
-			recvData.Data.Timeout = true
-			saveChan <- recvData
+		if err != nil {
+			log.Printf("Error reading TCP connection %s, error: %s", conn.RemoteAddr().String(), err.Error())
 			conn.Close()
-			return
-		} else if err != nil {
-			log.Printf("Error reading UDP connection %s, error: %s", conn.RemoteAddr().String(), err.Error())
-			_, err = conn.Write(dcBuffer)
-			if err != nil {
-			}
-			conn.Close()
-			return
+			break
 		}
 
 		var retBuffer []byte
 		retBuffer, recvData, err = HandleData(buffer[:n-1], "TCP", conn.RemoteAddr().String())
 		if err != nil {
 			log.Printf("HandleData Error: %s\nConnection to %s terminated.\n", err.Error(), conn.RemoteAddr().String())
-			_, err = conn.Write(dcBuffer)
-			if err != nil {
-			}
+			conn.Write(dcBuffer)
 			conn.Close()
-			return
+			break
 		}
 
 		_, err = conn.Write(retBuffer)
 		if err != nil {
 			log.Printf("TCP write to %s failed. Connection terminated\n", conn.RemoteAddr().String())
+			recvData.Timeout = true
+			writeLog <- recvData
 			conn.Close()
-			return
+			break
 		}
+		writeLog <- recvData
 		log.Printf("TCP Packet sent to %s\n", conn.RemoteAddr().String())
 	}
 }
@@ -298,8 +281,8 @@ func main() {
 	}
 
 	done := make(chan bool)
-	saveChan = make(chan SaveRoutineStruct)
-	SafeUDPClients = SafeUDPClientList{ClientList: list.New()}
+	writeLog = make(chan NATLogEntry)
+	SafeUDPClients = UDPClientList{ClientList: list.New()}
 
 	absPath, _ := filepath.Abs(schemaFile)
 	absPath = "file:///" + strings.ReplaceAll(absPath, "\\", "/")
@@ -322,7 +305,7 @@ func main() {
 	go AcceptTCP(l)
 
 	logPrefix := os.Getenv("LOG_PREFIX")
-	go SaveRoutine(awsBucket, logPrefix)
+	go saveLog(awsBucket, logPrefix)
 
 	log.Printf("NAT Test Server %s started.\n", Version)
 	log.Printf("TCP Port:       %d\n", TCPport)

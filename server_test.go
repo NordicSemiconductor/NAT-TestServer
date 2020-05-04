@@ -4,10 +4,6 @@ import (
 	"bytes"
 	"encoding/json"
 	"fmt"
-	"github.com/aws/aws-sdk-go/aws"
-	"github.com/aws/aws-sdk-go/aws/session"
-	"github.com/aws/aws-sdk-go/service/s3"
-	"github.com/google/uuid"
 	"io/ioutil"
 	"log"
 	"net"
@@ -15,13 +11,18 @@ import (
 	"strconv"
 	"testing"
 	"time"
+
+	"github.com/aws/aws-sdk-go/aws"
+	"github.com/aws/aws-sdk-go/aws/session"
+	"github.com/aws/aws-sdk-go/service/s3"
+	"github.com/google/uuid"
 )
 
 const testInterval = 5
 const testIPv4 = "0.0.0.0"
 const testIPv6 = "0000:0000:0000:0000:0000:0000:0000:0000"
 
-var testCases [4][]byte = [4][]byte{
+var testCases [][]byte = [][]byte{
 	[]byte("{\"op\":\"24201\",\"ip\":[\"" + testIPv4 + "\"],\"cell_id\":21229824,\"ue_mode\":2,\"lte_mode\":1,\"nbiot_mode\":1,\"iccid\":\"8931089318104314834F\",\"imei\":\"352656100367872\",\"interval\":" + strconv.Itoa(testInterval) + "}\n"),
 	[]byte("{\"op\":\"24201\",\"ip\":[\"" + testIPv4 + "\"],\"cell_id\":21229824,\"ue_mode\":2,\"lte_mode\":1,\"nbiot_mode\":1,\"iccid\":\"8931089318104314834\",\"imei\":\"352656100367872\",\"interval\":" + strconv.Itoa(testInterval) + "}\n"),
 	[]byte("{\"op\":\"24201\",\"ip\":[\"" + testIPv6 + "\"],\"cell_id\":21229824,\"ue_mode\":2,\"lte_mode\":1,\"nbiot_mode\":1,\"iccid\":\"8931089318104314834F\",\"imei\":\"352656100367872\",\"interval\":" + strconv.Itoa(testInterval) + "}\n"),
@@ -53,14 +54,11 @@ var errorCases [][]byte = [][]byte{
 
 const threadCount = 3
 
-// thread count * protocol count * packets saved (2 * sent & 1 * timeout)
-const expectedPacketCount = threadCount * 2 * (len(testCases) + 1)
+var expectedPacketCount = threadCount * 2 * len(testCases)
 
 var testPrefix string
 
 func TestMain(m *testing.M) {
-	log.SetOutput(ioutil.Discard)
-
 	newUUID, err := uuid.NewRandom()
 	if err != nil {
 		log.Printf("Failed to create new UUID: %d\n", err)
@@ -234,11 +232,11 @@ func TestOutput(t *testing.T) {
 			t.Error("Failed to read body of file")
 		}
 
-		var data SaveData
+		var data NATLogEntry
 		err = json.Unmarshal(body, &data)
 		if err != nil {
 			t.Error("Failed to read json data")
-		} else if data.Data.IP[0] == testIPv4 || data.Data.IP[0] == testIPv6 {
+		} else if data.Message.IP[0] == testIPv4 || data.Message.IP[0] == testIPv6 {
 			foundCount++
 		}
 	}
