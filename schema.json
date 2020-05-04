@@ -2,13 +2,13 @@
   "type": "object",
   "properties": {
     "op": {
-      "description": "Name of the current network operator",
+      "description": "MCC/MNC: Country and network code of the current mobile network",
       "type": "string",
       "minLength": 5,
       "maxLength": 6
     },
     "ip": {
-      "description": "IP address of the device as IPv4, IPv6 or hostnames",
+      "description": "Addresses of the device as IPv4, IPv6 or hostnames",
       "type": "array",
       "minItems": 1,
       "items": {
