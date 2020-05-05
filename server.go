@@ -1,7 +1,6 @@
 package main
 
 import (
-	"container/list"
 	"context"
 	"encoding/json"
 	"errors"
@@ -44,28 +43,29 @@ type NATLogEntry struct {
 	Message   DeviceMessage
 }
 
-type UDPClient struct {
-	Addr     net.Addr
-	Timer    *time.Timer
-	DoneChan chan bool
+type UDPClientTimeout struct {
+	Timeout *time.Timer
+	Log     NATLogEntry
 }
 
-type UDPClientList struct {
-	ClientList *list.List
-	Mux        sync.Mutex
+type UDPClientTimeoutMap struct {
+	Map map[string]UDPClientTimeout
+	Mux sync.Mutex
 }
 
 const UDPport = 3050
 const TCPport = 3051
-const newPacketTimeout = 60
+const newUDPMessageTimeoutInSeconds = 60
 const maxBufferSize = 256
 const schemaFile = "schema.json"
 const timeFormat = "2006-01-02T15:04:05.00-0700"
 
-var dcBuffer []byte = []byte("Error occured.\nConnection closed.\n")
+var genericErrorMessage []byte = []byte("Error occured.\nConnection closed.\n")
 var writeLog chan NATLogEntry
 var schemaLoader gojsonschema.JSONLoader
-var SafeUDPClients UDPClientList
+
+// UPDClientTimeouts stores timers to wait for UDP client responses
+var UPDClientTimeouts UDPClientTimeoutMap
 var Version string = "0.0.0-development"
 
 func saveLog(awsBucket string, prefix string) {
@@ -120,6 +120,7 @@ func saveLog(awsBucket string, prefix string) {
 	}
 }
 
+// HandleData read incoming data from the handed buffer and pause execution based on the requested interval
 func HandleData(buffer []byte, protocol string, addr string) ([]byte, NATLogEntry, error) {
 	timestamp := time.Now()
 
@@ -147,61 +148,52 @@ func HandleData(buffer []byte, protocol string, addr string) ([]byte, NATLogEntr
 	return []byte(retString), saveData, nil
 }
 
+// HandleUDP handle UDP messages.
+// Timeouts are detected by waiting for a client to send a new message withing 60 seconds after having sent the delayed response.
 func HandleUDP(pc net.PacketConn, addr net.Addr, buffer []byte) {
-	doneChan := make(chan bool)
-
-	retBuffer, recvData, err := HandleData(buffer, "UDP", addr.String())
+	retBuffer, logEntry, err := HandleData(buffer, "UDP", addr.String())
 	if err != nil {
 		log.Printf("HandleData Error: %s\nConnection to %s terminated.\n", err.Error(), addr.String())
-		pc.WriteTo(dcBuffer, addr)
+		pc.WriteTo(genericErrorMessage, addr)
 		return
 	}
 
 	log.Printf("UDP Packet received from %s\n", addr.String())
 
+	UPDClientTimeouts.Mux.Lock()
+	v, ok := UPDClientTimeouts.Map[addr.String()]
+	UPDClientTimeouts.Mux.Unlock()
+	if ok {
+		v.Timeout.Stop()
+		writeLog <- v.Log
+	}
+
 	_, err = pc.WriteTo(retBuffer, addr)
 	if err != nil {
 		log.Printf("UDP write to %s failed, error: %s\n", addr.String(), err.Error())
-		recvData.Timeout = true
-		writeLog <- recvData
 		return
 	}
 	log.Printf("UDP Packet sent to %s\n", addr.String())
 
-	timer := time.NewTimer(newPacketTimeout * time.Second)
-
-	SafeUDPClients.Mux.Lock()
-	clientRef := SafeUDPClients.ClientList.PushBack(UDPClient{Addr: addr, Timer: timer, DoneChan: doneChan})
-	SafeUDPClients.Mux.Unlock()
+	timer := time.NewTimer(newUDPMessageTimeoutInSeconds * time.Second)
+	UPDClientTimeouts.Mux.Lock()
+	UPDClientTimeouts.Map[addr.String()] = UDPClientTimeout{Timeout: timer, Log: logEntry}
+	UPDClientTimeouts.Mux.Unlock()
 	select {
 	case <-timer.C:
-		SafeUDPClients.Mux.Lock()
-		SafeUDPClients.ClientList.Remove(clientRef)
-		SafeUDPClients.Mux.Unlock()
-		log.Printf("UDP connection to %s timed out. Connection terminated.\n", addr.String())
-		recvData.Timeout = true
-		writeLog <- recvData
-	case <-doneChan:
-		writeLog <- recvData
-		timer.Stop()
+		UPDClientTimeouts.Mux.Lock()
+		delete(UPDClientTimeouts.Map, addr.String())
+		UPDClientTimeouts.Mux.Unlock()
+		log.Printf("UDP connection to %s timed out. Connection terminated.\n", addr)
+		logEntry.Timeout = true
+		writeLog <- logEntry
 	}
 }
 
-func StopUDPClientTimeout(addr net.Addr) {
-	SafeUDPClients.Mux.Lock()
-	for e := SafeUDPClients.ClientList.Front(); e != nil; e = e.Next() {
-		client := e.Value.(UDPClient)
-		if strings.Compare(client.Addr.String(), addr.String()) == 0 {
-			client.Timer.Stop()
-			SafeUDPClients.ClientList.Remove(e)
-			break
-		}
-	}
-	SafeUDPClients.Mux.Unlock()
-}
-
+// HandleTCP handle UDP messages.
+// Timouts are detected by checking for successfull TCP writes.
 func HandleTCP(conn net.Conn) {
-	var recvData NATLogEntry
+	var logEntry NATLogEntry
 	for {
 		buffer := make([]byte, maxBufferSize)
 
@@ -213,10 +205,10 @@ func HandleTCP(conn net.Conn) {
 		}
 
 		var retBuffer []byte
-		retBuffer, recvData, err = HandleData(buffer[:n-1], "TCP", conn.RemoteAddr().String())
+		retBuffer, logEntry, err = HandleData(buffer[:n-1], "TCP", conn.RemoteAddr().String())
 		if err != nil {
 			log.Printf("HandleData Error: %s\nConnection to %s terminated.\n", err.Error(), conn.RemoteAddr().String())
-			conn.Write(dcBuffer)
+			conn.Write(genericErrorMessage)
 			conn.Close()
 			break
 		}
@@ -224,12 +216,12 @@ func HandleTCP(conn net.Conn) {
 		_, err = conn.Write(retBuffer)
 		if err != nil {
 			log.Printf("TCP write to %s failed. Connection terminated\n", conn.RemoteAddr().String())
-			recvData.Timeout = true
-			writeLog <- recvData
+			logEntry.Timeout = true
+			writeLog <- logEntry
 			conn.Close()
 			break
 		}
-		writeLog <- recvData
+		writeLog <- logEntry
 		log.Printf("TCP Packet sent to %s\n", conn.RemoteAddr().String())
 	}
 }
@@ -245,7 +237,6 @@ func AcceptUDP(pc net.PacketConn) {
 		}
 
 		go HandleUDP(pc, addr, buffer[:n-1])
-		go StopUDPClientTimeout(addr)
 	}
 }
 
@@ -282,7 +273,7 @@ func main() {
 
 	done := make(chan bool)
 	writeLog = make(chan NATLogEntry)
-	SafeUDPClients = UDPClientList{ClientList: list.New()}
+	UPDClientTimeouts = UDPClientTimeoutMap{Map: make(map[string]UDPClientTimeout)}
 
 	absPath, _ := filepath.Abs(schemaFile)
 	absPath = "file:///" + strings.ReplaceAll(absPath, "\\", "/")

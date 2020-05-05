@@ -123,7 +123,7 @@ func TCPFunc(t *testing.T) {
 			conn.Close()
 			t.Error("Error reading connection")
 			return
-		} else if bytes.Compare(tempBuf[:n], dcBuffer) == 0 {
+		} else if bytes.Compare(tempBuf[:n], genericErrorMessage) == 0 {
 			conn.Close()
 			t.Errorf("Wrong format in packet: %s\n", v)
 			return
@@ -188,7 +188,7 @@ func UDPFunc(t *testing.T) {
 			conn.Close()
 			t.Error("Error reading connection")
 			return
-		} else if bytes.Compare(tempBuf[:n], dcBuffer) == 0 {
+		} else if bytes.Compare(tempBuf[:n], genericErrorMessage) == 0 {
 			conn.Close()
 			t.Errorf("Wrong format in packet: %s\n", v)
 			return
@@ -208,7 +208,7 @@ func TestHandleData(t *testing.T) {
 
 func TestOutput(t *testing.T) {
 	// Wait for timeout + 10% for timeout packets to be written
-	time.Sleep(time.Duration(newPacketTimeout*1.1) * time.Second)
+	time.Sleep(time.Duration(newUDPMessageTimeoutInSeconds*1.1) * time.Second)
 
 	sess, err := session.NewSession(&aws.Config{})
 	if err != nil {
