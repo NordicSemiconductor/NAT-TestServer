@@ -16,6 +16,7 @@ import (
 	"github.com/aws/aws-sdk-go/aws/session"
 	"github.com/aws/aws-sdk-go/service/s3"
 	"github.com/google/uuid"
+	"github.com/stretchr/testify/assert"
 )
 
 const testInterval = 5
@@ -53,8 +54,6 @@ var errorCases [][]byte = [][]byte{
 }
 
 const threadCount = 3
-
-var expectedPacketCount = threadCount * 2 * len(testCases)
 
 var testPrefix string
 
@@ -221,7 +220,8 @@ func TestOutput(t *testing.T) {
 		t.Error("Unable to get bucket items", err)
 	}
 
-	var foundCount int
+	var foundCount = 0
+	var timedOutCount = 0
 	for _, item := range resp.Contents {
 		obj, err := svc.GetObject(&s3.GetObjectInput{Bucket: aws.String(os.Getenv("AWS_BUCKET")), Key: aws.String(*item.Key)})
 		if err != nil {
@@ -232,16 +232,21 @@ func TestOutput(t *testing.T) {
 			t.Error("Failed to read body of file")
 		}
 
-		var data NATLogEntry
-		err = json.Unmarshal(body, &data)
+		var log NATLogEntry
+		err = json.Unmarshal(body, &log)
 		if err != nil {
 			t.Error("Failed to read json data")
-		} else if data.Message.IP[0] == testIPv4 || data.Message.IP[0] == testIPv6 {
+		} else if log.Message.IP[0] == testIPv4 || log.Message.IP[0] == testIPv6 {
 			foundCount++
+		}
+		if log.Timeout {
+			timedOutCount++
 		}
 	}
 
-	if foundCount != expectedPacketCount {
-		t.Errorf("Expected number of files: %d, Found:%d\n", expectedPacketCount, foundCount)
-	}
+	assert := assert.New(t)
+	assert.Equal(threadCount*2*len(testCases), foundCount, "The number of log entries should be equal.")
+	// The TCP messages will not timeout because the server sends the response in sync, while for UDP it waits for the *next* message to arrive before registering a success/timeout.
+	// This message never arrives, because the test client is terminated after the last test case.
+	assert.Equal(threadCount, timedOutCount, "Only the last UDP message should be registered as a timeout")
 }
