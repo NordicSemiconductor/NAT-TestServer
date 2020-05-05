@@ -53,7 +53,8 @@
       "eslint --ext .js,.ts"
     ],
     "*.go": [
-      "gofmt -w"
+      "gofmt -w",
+      "golint"
     ]
   },
   "release": {
