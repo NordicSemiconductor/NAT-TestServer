@@ -23,10 +23,10 @@ import (
 	"github.com/xeipuuv/gojsonschema"
 )
 
-type DeviceMessage struct {
+type deviceMessage struct {
 	Operator  string   `json:"op"`
 	IP        []string `json:"ip"`
-	CellId    int      `json:"cell_id"`
+	CellID    int      `json:"cell_id"`
 	UEMode    int      `json:"ue_mode"`
 	LTEMode   int      `json:"lte_mode"`
 	NBIotMode int      `json:"nbiot_mode"`
@@ -35,26 +35,29 @@ type DeviceMessage struct {
 	Interval  int      `json:"interval"`
 }
 
+// NATLogEntry gets logged to S3
 type NATLogEntry struct {
 	Protocol  string
 	IP        string
 	Timeout   bool
 	Timestamp time.Time
-	Message   DeviceMessage
+	Message   deviceMessage
 }
 
-type UDPClientTimeout struct {
+type udpClientTimeout struct {
 	Timeout *time.Timer
 	Log     NATLogEntry
 }
 
-type UDPClientTimeoutMap struct {
-	Map map[string]UDPClientTimeout
+type udpClientTimeoutMap struct {
+	Map map[string]udpClientTimeout
 	Mux sync.Mutex
 }
 
-const UDPport = 3050
-const TCPport = 3051
+var udpPort = 3050
+var tcpPort = 3051
+var version = "0.0.0-development"
+
 const newUDPMessageTimeoutInSeconds = 60
 const maxBufferSize = 256
 const schemaFile = "schema.json"
@@ -64,9 +67,8 @@ var genericErrorMessage []byte = []byte("Error occured.\nConnection closed.\n")
 var writeLog chan NATLogEntry
 var schemaLoader gojsonschema.JSONLoader
 
-// UPDClientTimeouts stores timers to wait for UDP client responses
-var UPDClientTimeouts UDPClientTimeoutMap
-var Version string = "0.0.0-development"
+// updClientTimeouts stores timers to wait for UDP client responses
+var updClientTimeouts udpClientTimeoutMap
 
 func saveLog(awsBucket string, prefix string) {
 	sess, err := session.NewSession(&aws.Config{})
@@ -129,12 +131,12 @@ func HandleData(buffer []byte, protocol string, addr string) ([]byte, NATLogEntr
 	if err != nil {
 		return nil, NATLogEntry{}, err
 	} else if !result.Valid() {
-		return nil, NATLogEntry{}, errors.New("Message uses wrong format.\n")
+		return nil, NATLogEntry{}, errors.New("Message uses wrong format")
 	}
 
 	log.Printf("%s Message received from %s\n", protocol, addr)
 
-	var message DeviceMessage
+	var message deviceMessage
 	err = json.Unmarshal(buffer, &message)
 	if err != nil {
 		return nil, NATLogEntry{}, err
@@ -148,9 +150,9 @@ func HandleData(buffer []byte, protocol string, addr string) ([]byte, NATLogEntr
 	return []byte(retString), saveData, nil
 }
 
-// HandleUDP handle UDP messages.
+// handleUDP handle UDP messages.
 // Timeouts are detected by waiting for a client to send a new message withing 60 seconds after having sent the delayed response.
-func HandleUDP(pc net.PacketConn, addr net.Addr, buffer []byte) {
+func handleUDP(pc net.PacketConn, addr net.Addr, buffer []byte) {
 	retBuffer, logEntry, err := HandleData(buffer, "UDP", addr.String())
 	if err != nil {
 		log.Printf("HandleData Error: %s\nConnection to %s terminated.\n", err.Error(), addr.String())
@@ -160,9 +162,9 @@ func HandleUDP(pc net.PacketConn, addr net.Addr, buffer []byte) {
 
 	log.Printf("UDP Packet received from %s\n", addr.String())
 
-	UPDClientTimeouts.Mux.Lock()
-	v, ok := UPDClientTimeouts.Map[addr.String()]
-	UPDClientTimeouts.Mux.Unlock()
+	updClientTimeouts.Mux.Lock()
+	v, ok := updClientTimeouts.Map[addr.String()]
+	updClientTimeouts.Mux.Unlock()
 	if ok {
 		v.Timeout.Stop()
 		writeLog <- v.Log
@@ -176,23 +178,23 @@ func HandleUDP(pc net.PacketConn, addr net.Addr, buffer []byte) {
 	log.Printf("UDP Packet sent to %s\n", addr.String())
 
 	timer := time.NewTimer(newUDPMessageTimeoutInSeconds * time.Second)
-	UPDClientTimeouts.Mux.Lock()
-	UPDClientTimeouts.Map[addr.String()] = UDPClientTimeout{Timeout: timer, Log: logEntry}
-	UPDClientTimeouts.Mux.Unlock()
+	updClientTimeouts.Mux.Lock()
+	updClientTimeouts.Map[addr.String()] = udpClientTimeout{Timeout: timer, Log: logEntry}
+	updClientTimeouts.Mux.Unlock()
 	select {
 	case <-timer.C:
-		UPDClientTimeouts.Mux.Lock()
-		delete(UPDClientTimeouts.Map, addr.String())
-		UPDClientTimeouts.Mux.Unlock()
+		updClientTimeouts.Mux.Lock()
+		delete(updClientTimeouts.Map, addr.String())
+		updClientTimeouts.Mux.Unlock()
 		log.Printf("UDP connection to %s timed out. Connection terminated.\n", addr)
 		logEntry.Timeout = true
 		writeLog <- logEntry
 	}
 }
 
-// HandleTCP handle UDP messages.
+// handleTCP handle UDP messages.
 // Timouts are detected by checking for successfull TCP writes.
-func HandleTCP(conn net.Conn) {
+func handleTCP(conn net.Conn) {
 	var logEntry NATLogEntry
 	for {
 		buffer := make([]byte, maxBufferSize)
@@ -226,7 +228,7 @@ func HandleTCP(conn net.Conn) {
 	}
 }
 
-func AcceptUDP(pc net.PacketConn) {
+func acceptUDP(pc net.PacketConn) {
 	for {
 		buffer := make([]byte, maxBufferSize)
 
@@ -236,18 +238,18 @@ func AcceptUDP(pc net.PacketConn) {
 			continue
 		}
 
-		go HandleUDP(pc, addr, buffer[:n-1])
+		go handleUDP(pc, addr, buffer[:n-1])
 	}
 }
 
-func AcceptTCP(l net.Listener) {
+func acceptTCP(l net.Listener) {
 	for {
 		conn, err := l.Accept()
 		if err != nil {
 			continue
 		}
 
-		go HandleTCP(conn)
+		go handleTCP(conn)
 	}
 }
 
@@ -256,7 +258,7 @@ func main() {
 
 	awsBucket := os.Getenv("AWS_BUCKET")
 	awsRegion := os.Getenv("AWS_REGION")
-	awsAccessKeyId := os.Getenv("AWS_ACCESS_KEY_ID")
+	awsAccessKeyID := os.Getenv("AWS_ACCESS_KEY_ID")
 	awsSecretAccessKey := os.Getenv("AWS_SECRET_ACCESS_KEY")
 	if len(awsBucket) == 0 {
 		log.Fatal("AWS_BUCKET not defined")
@@ -264,7 +266,7 @@ func main() {
 	if len(awsRegion) == 0 {
 		log.Fatal("AWS_REGION not defined")
 	}
-	if len(awsAccessKeyId) == 0 {
+	if len(awsAccessKeyID) == 0 {
 		log.Fatal("AWS_ACCESS_KEY_ID not defined")
 	}
 	if len(awsSecretAccessKey) == 0 {
@@ -273,18 +275,18 @@ func main() {
 
 	done := make(chan bool)
 	writeLog = make(chan NATLogEntry)
-	UPDClientTimeouts = UDPClientTimeoutMap{Map: make(map[string]UDPClientTimeout)}
+	updClientTimeouts = udpClientTimeoutMap{Map: make(map[string]udpClientTimeout)}
 
 	absPath, _ := filepath.Abs(schemaFile)
 	absPath = "file:///" + strings.ReplaceAll(absPath, "\\", "/")
 	schemaLoader = gojsonschema.NewReferenceLoader(absPath)
 
-	pc, err := net.ListenPacket("udp", fmt.Sprintf(":%d", UDPport))
+	pc, err := net.ListenPacket("udp", fmt.Sprintf(":%d", udpPort))
 	if err != nil {
 		log.Fatal(err)
 	}
 
-	l, err := net.Listen("tcp", fmt.Sprintf(":%d", TCPport))
+	l, err := net.Listen("tcp", fmt.Sprintf(":%d", tcpPort))
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -292,15 +294,15 @@ func main() {
 	defer pc.Close()
 	defer l.Close()
 
-	go AcceptUDP(pc)
-	go AcceptTCP(l)
+	go acceptUDP(pc)
+	go acceptTCP(l)
 
 	logPrefix := os.Getenv("LOG_PREFIX")
 	go saveLog(awsBucket, logPrefix)
 
-	log.Printf("NAT Test Server %s started.\n", Version)
-	log.Printf("TCP Port:       %d\n", TCPport)
-	log.Printf("UDP Port:       %d\n", UDPport)
+	log.Printf("NAT Test Server %s started.\n", version)
+	log.Printf("TCP Port:       %d\n", tcpPort)
+	log.Printf("UDP Port:       %d\n", udpPort)
 	log.Printf("AWS Bucket:     %s\n", os.Getenv("AWS_BUCKET"))
 	if len(logPrefix) > 0 {
 		log.Printf("Log prefix:     %s\n", logPrefix)
