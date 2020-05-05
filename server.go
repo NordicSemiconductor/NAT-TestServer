@@ -35,7 +35,8 @@ type deviceMessage struct {
 	Interval  int      `json:"interval"`
 }
 
-type natLogEntry struct {
+// NATLogEntry gets logged to S3
+type NATLogEntry struct {
 	Protocol  string
 	IP        string
 	Timeout   bool
@@ -45,7 +46,7 @@ type natLogEntry struct {
 
 type udpClientTimeout struct {
 	Timeout *time.Timer
-	Log     natLogEntry
+	Log     NATLogEntry
 }
 
 type udpClientTimeoutMap struct {
@@ -63,7 +64,7 @@ const schemaFile = "schema.json"
 const timeFormat = "2006-01-02T15:04:05.00-0700"
 
 var genericErrorMessage []byte = []byte("Error occured.\nConnection closed.\n")
-var writeLog chan natLogEntry
+var writeLog chan NATLogEntry
 var schemaLoader gojsonschema.JSONLoader
 
 // updClientTimeouts stores timers to wait for UDP client responses
@@ -121,16 +122,16 @@ func saveLog(awsBucket string, prefix string) {
 	}
 }
 
-// handleData read incoming data from the handed buffer and pause execution based on the requested interval
-func handleData(buffer []byte, protocol string, addr string) ([]byte, natLogEntry, error) {
+// HandleData read incoming data from the handed buffer and pause execution based on the requested interval
+func HandleData(buffer []byte, protocol string, addr string) ([]byte, NATLogEntry, error) {
 	timestamp := time.Now()
 
 	documentLoader := gojsonschema.NewStringLoader(string(buffer))
 	result, err := gojsonschema.Validate(schemaLoader, documentLoader)
 	if err != nil {
-		return nil, natLogEntry{}, err
+		return nil, NATLogEntry{}, err
 	} else if !result.Valid() {
-		return nil, natLogEntry{}, errors.New("Message uses wrong format")
+		return nil, NATLogEntry{}, errors.New("Message uses wrong format")
 	}
 
 	log.Printf("%s Message received from %s\n", protocol, addr)
@@ -138,23 +139,23 @@ func handleData(buffer []byte, protocol string, addr string) ([]byte, natLogEntr
 	var message deviceMessage
 	err = json.Unmarshal(buffer, &message)
 	if err != nil {
-		return nil, natLogEntry{}, err
+		return nil, NATLogEntry{}, err
 	}
 
 	time.Sleep(time.Duration(message.Interval) * time.Second)
 
 	endTime := time.Now().Format(timeFormat)
 	retString := "Interval: " + strconv.Itoa(message.Interval) + "\nReturned: " + endTime + "\n"
-	saveData := natLogEntry{Timestamp: timestamp, Protocol: protocol, IP: addr, Timeout: false, Message: message}
+	saveData := NATLogEntry{Timestamp: timestamp, Protocol: protocol, IP: addr, Timeout: false, Message: message}
 	return []byte(retString), saveData, nil
 }
 
 // handleUDP handle UDP messages.
 // Timeouts are detected by waiting for a client to send a new message withing 60 seconds after having sent the delayed response.
 func handleUDP(pc net.PacketConn, addr net.Addr, buffer []byte) {
-	retBuffer, logEntry, err := handleData(buffer, "UDP", addr.String())
+	retBuffer, logEntry, err := HandleData(buffer, "UDP", addr.String())
 	if err != nil {
-		log.Printf("handleData Error: %s\nConnection to %s terminated.\n", err.Error(), addr.String())
+		log.Printf("HandleData Error: %s\nConnection to %s terminated.\n", err.Error(), addr.String())
 		pc.WriteTo(genericErrorMessage, addr)
 		return
 	}
@@ -194,7 +195,7 @@ func handleUDP(pc net.PacketConn, addr net.Addr, buffer []byte) {
 // handleTCP handle UDP messages.
 // Timouts are detected by checking for successfull TCP writes.
 func handleTCP(conn net.Conn) {
-	var logEntry natLogEntry
+	var logEntry NATLogEntry
 	for {
 		buffer := make([]byte, maxBufferSize)
 
@@ -206,9 +207,9 @@ func handleTCP(conn net.Conn) {
 		}
 
 		var retBuffer []byte
-		retBuffer, logEntry, err = handleData(buffer[:n-1], "TCP", conn.RemoteAddr().String())
+		retBuffer, logEntry, err = HandleData(buffer[:n-1], "TCP", conn.RemoteAddr().String())
 		if err != nil {
-			log.Printf("handleData Error: %s\nConnection to %s terminated.\n", err.Error(), conn.RemoteAddr().String())
+			log.Printf("HandleData Error: %s\nConnection to %s terminated.\n", err.Error(), conn.RemoteAddr().String())
 			conn.Write(genericErrorMessage)
 			conn.Close()
 			break
@@ -273,7 +274,7 @@ func main() {
 	}
 
 	done := make(chan bool)
-	writeLog = make(chan natLogEntry)
+	writeLog = make(chan NATLogEntry)
 	updClientTimeouts = udpClientTimeoutMap{Map: make(map[string]udpClientTimeout)}
 
 	absPath, _ := filepath.Abs(schemaFile)
