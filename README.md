@@ -12,6 +12,23 @@ Receives NAT test messages from the
 [NAT Test Firmware](https://github.com/NordicSemiconductor/NAT-TestFirmware/)
 and logs them and timeout occurances to S3.
 
+## NAT Timeout determination
+
+The server listens for TCP and UPD connections. Clients can send messages
+according to the [`schema.json`](./schema.json) which contain an `interval`
+property. This instructs the server to wait that amount in seconds before
+returning a response.
+
+On _TCP connections_ the connection is considered to be timed out when the
+server cannot reply to the client after the interval has passed. The TCP
+connection will ensure that the client receives the message from the server if
+it is still connected.
+
+On _UDP connections_ the connection is considered to be timed out when the
+server does not receive a new message from the client within 60 seconds after
+having sent the response for the previous message. There is no other way to
+ensure that the connection is intact.
+
 ## Testing
 
 Make these environment variable available:
@@ -27,6 +44,7 @@ To test if the server is listening on local ports and saves the correct data,
 execute the command
 
 ```
+go get -v -t -d ./...
 go test
 ```
 

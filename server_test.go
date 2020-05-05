@@ -1,13 +1,8 @@
 package main
 
 import (
-	"bytes"
 	"encoding/json"
 	"fmt"
-	"github.com/aws/aws-sdk-go/aws"
-	"github.com/aws/aws-sdk-go/aws/session"
-	"github.com/aws/aws-sdk-go/service/s3"
-	"github.com/google/uuid"
 	"io/ioutil"
 	"log"
 	"net"
@@ -15,13 +10,19 @@ import (
 	"strconv"
 	"testing"
 	"time"
+
+	"github.com/aws/aws-sdk-go/aws"
+	"github.com/aws/aws-sdk-go/aws/session"
+	"github.com/aws/aws-sdk-go/service/s3"
+	"github.com/google/uuid"
+	"github.com/stretchr/testify/assert"
 )
 
 const testInterval = 5
 const testIPv4 = "0.0.0.0"
 const testIPv6 = "0000:0000:0000:0000:0000:0000:0000:0000"
 
-var testCases [4][]byte = [4][]byte{
+var testCases [][]byte = [][]byte{
 	[]byte("{\"op\":\"24201\",\"ip\":[\"" + testIPv4 + "\"],\"cell_id\":21229824,\"ue_mode\":2,\"lte_mode\":1,\"nbiot_mode\":1,\"iccid\":\"8931089318104314834F\",\"imei\":\"352656100367872\",\"interval\":" + strconv.Itoa(testInterval) + "}\n"),
 	[]byte("{\"op\":\"24201\",\"ip\":[\"" + testIPv4 + "\"],\"cell_id\":21229824,\"ue_mode\":2,\"lte_mode\":1,\"nbiot_mode\":1,\"iccid\":\"8931089318104314834\",\"imei\":\"352656100367872\",\"interval\":" + strconv.Itoa(testInterval) + "}\n"),
 	[]byte("{\"op\":\"24201\",\"ip\":[\"" + testIPv6 + "\"],\"cell_id\":21229824,\"ue_mode\":2,\"lte_mode\":1,\"nbiot_mode\":1,\"iccid\":\"8931089318104314834F\",\"imei\":\"352656100367872\",\"interval\":" + strconv.Itoa(testInterval) + "}\n"),
@@ -53,14 +54,9 @@ var errorCases [][]byte = [][]byte{
 
 const threadCount = 3
 
-// thread count * protocol count * packets saved (2 * sent & 1 * timeout)
-const expectedPacketCount = threadCount * 2 * (len(testCases) + 1)
-
 var testPrefix string
 
 func TestMain(m *testing.M) {
-	log.SetOutput(ioutil.Discard)
-
 	newUUID, err := uuid.NewRandom()
 	if err != nil {
 		log.Printf("Failed to create new UUID: %d\n", err)
@@ -89,15 +85,13 @@ func TestTCP(t *testing.T) {
 }
 
 func TCPFunc(t *testing.T) {
+	assert := assert.New(t)
 	t.Parallel()
 
 	doneChan := make(chan bool)
 
 	conn, err := net.Dial("tcp", ":3051")
-	if err != nil {
-		t.Error("could not connect to server: ", err)
-		return
-	}
+	assert.NoError(err, "It should be able to connect to the server")
 	defer conn.Close()
 
 	for _, v := range testCases {
@@ -121,15 +115,8 @@ func TCPFunc(t *testing.T) {
 
 		tempBuf := make([]byte, 256)
 		n, err := conn.Read(tempBuf)
-		if err != nil {
-			conn.Close()
-			t.Error("Error reading connection")
-			return
-		} else if bytes.Compare(tempBuf[:n], dcBuffer) == 0 {
-			conn.Close()
-			t.Errorf("Wrong format in packet: %s\n", v)
-			return
-		}
+		assert.NoError(err, "It should read the response")
+		assert.NotEqual(tempBuf[:n], genericErrorMessage, "it should return an error message")
 		doneChan <- true
 	}
 }
@@ -141,28 +128,15 @@ func TestUDP(t *testing.T) {
 }
 
 func UDPFunc(t *testing.T) {
+	assert := assert.New(t)
 	t.Parallel()
 
 	doneChan := make(chan bool)
 
-	ServerAddr, err := net.ResolveUDPAddr("udp", "127.0.0.1:3050")
-	if err != nil {
-		t.Error("Error resolving remote address")
-		return
-	}
-
-	LocalAddr, err := net.ResolveUDPAddr("udp", "127.0.0.1:0")
-	if err != nil {
-		t.Error("Error resolving local address")
-		return
-	}
-
+	ServerAddr, _ := net.ResolveUDPAddr("udp", "127.0.0.1:3050")
+	LocalAddr, _ := net.ResolveUDPAddr("udp", "127.0.0.1:0")
 	conn, err := net.DialUDP("udp", LocalAddr, ServerAddr)
-	if err != nil {
-		t.Error("Error connecting to server")
-		return
-	}
-
+	assert.NoError(err, "It should be able to connect to the server")
 	defer conn.Close()
 
 	for _, v := range testCases {
@@ -186,64 +160,53 @@ func UDPFunc(t *testing.T) {
 
 		tempBuf := make([]byte, 256)
 		n, err := conn.Read(tempBuf)
-		if err != nil {
-			conn.Close()
-			t.Error("Error reading connection")
-			return
-		} else if bytes.Compare(tempBuf[:n], dcBuffer) == 0 {
-			conn.Close()
-			t.Errorf("Wrong format in packet: %s\n", v)
-			return
-		}
+		assert.NoError(err, "It should read the response")
+		assert.NotEqual(tempBuf[:n], genericErrorMessage, "it should return an error message")
 		doneChan <- true
 	}
 }
 
 func TestHandleData(t *testing.T) {
+	assert := assert.New(t)
 	for _, errorCase := range errorCases {
 		_, _, err := HandleData(errorCase, "UDP", testIPv4)
-		if err == nil {
-			t.Errorf("Wrong format was accepted by server. Sent: %s\n", errorCase)
-		}
+		assert.Error(err, "An invalid message should not be accepted by the server: %s", errorCase)
 	}
 }
 
 func TestOutput(t *testing.T) {
+	assert := assert.New(t)
 	// Wait for timeout + 10% for timeout packets to be written
-	time.Sleep(time.Duration(newPacketTimeout*1.1) * time.Second)
+	time.Sleep(time.Duration(newUDPMessageTimeoutInSeconds*1.1) * time.Second)
 
 	sess, err := session.NewSession(&aws.Config{})
-	if err != nil {
-		log.Fatal("Error creating session ", err)
-	}
+	assert.NoError(err, "A session should be created")
 	svc := s3.New(sess, &aws.Config{})
 
 	resp, err := svc.ListObjectsV2(&s3.ListObjectsV2Input{Bucket: aws.String(os.Getenv("AWS_BUCKET")), Prefix: aws.String(testPrefix)})
-	if err != nil {
-		t.Error("Unable to get bucket items", err)
-	}
+	assert.NoError(err, "Items in the bucket should be listed")
 
-	var foundCount int
+	var foundCount = 0
+	var timedOutCount = 0
 	for _, item := range resp.Contents {
 		obj, err := svc.GetObject(&s3.GetObjectInput{Bucket: aws.String(os.Getenv("AWS_BUCKET")), Key: aws.String(*item.Key)})
-		if err != nil {
-			t.Error("Unable to read bucket item", err)
-		}
+		assert.NoError(err, "The item should be read")
 		body, err := ioutil.ReadAll(obj.Body)
-		if err != nil {
-			t.Error("Failed to read body of file")
-		}
+		assert.NoError(err, "The item's body should be read")
 
-		var data SaveData
-		err = json.Unmarshal(body, &data)
-		if err != nil {
-			t.Error("Failed to read json data")
-		} else if data.Data.IP[0] == testIPv4 || data.Data.IP[0] == testIPv6 {
+		var log NATLogEntry
+		err = json.Unmarshal(body, &log)
+		assert.NoError(err, "The item should be parsed to JSON")
+		if log.Message.IP[0] == testIPv4 || log.Message.IP[0] == testIPv6 {
 			foundCount++
 		}
+		if log.Timeout {
+			timedOutCount++
+		}
 	}
 
-	if foundCount != expectedPacketCount {
-		t.Errorf("Expected number of files: %d, Found:%d\n", expectedPacketCount, foundCount)
-	}
+	assert.Equal(threadCount*2*len(testCases), foundCount, "The number of log entries should be equal.")
+	// The TCP messages will not timeout because the server sends the response in sync, while for UDP it waits for the *next* message to arrive before registering a success/timeout.
+	// This message never arrives, because the test client is terminated after the last test case.
+	assert.Equal(threadCount, timedOutCount, "Only the last UDP message should be registered as a timeout")
 }
