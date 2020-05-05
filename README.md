@@ -44,6 +44,7 @@ To test if the server is listening on local ports and saves the correct data,
 execute the command
 
 ```
+go get -v -t -d ./...
 go test
 ```
 
