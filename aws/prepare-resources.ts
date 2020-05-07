@@ -17,7 +17,7 @@ export const prepareResources = async () => {
 	const outDir = path.resolve(rootDir, 'dist', 'lambdas')
 	try {
 		await fs.stat(outDir)
-	} catch (_) {
+	} catch {
 		await fs.mkdir(outDir)
 	}
 	const sourceCodeBucketName = await getLambdaSourceCodeBucketName()
