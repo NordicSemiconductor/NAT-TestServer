@@ -83,6 +83,7 @@ export class CD extends CloudFormation.Resource {
 					AWS_SECRET_ACCESS_KEY: userAccessKey.attrSecretAccessKey,
 					AWS_REGION: parent.region,
 					AWS_BUCKET: bucket.bucketName,
+					LOG_PREFIX: 'raw',
 				},
 				cpu: 256,
 				memoryLimitMiB: 512,

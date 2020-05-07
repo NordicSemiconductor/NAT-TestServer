@@ -9,11 +9,11 @@ import {
 
 export type Lambdas = {
 	updateDNS: string
+	concatenateLogFiles: string
 }
 
 export const prepareResources = async () => {
 	const rootDir = process.cwd()
-	// Pack the lambdas
 	const outDir = path.resolve(rootDir, 'dist', 'lambdas')
 	try {
 		await fs.stat(outDir)
@@ -34,6 +34,12 @@ export const prepareResources = async () => {
 		Bucket: sourceCodeBucketName,
 		lambdas: {
 			updateDNS: path.resolve(rootDir, 'aws', 'updateDNS.ts'),
+			concatenateLogFiles: path.resolve(
+				rootDir,
+				'aws',
+				'concatenateLogFiles',
+				'lambda.ts',
+			),
 		},
 		tsConfig: path.resolve(rootDir, 'tsconfig.json'),
 	})

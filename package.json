@@ -17,21 +17,21 @@
   },
   "homepage": "https://github.com/NordicSemiconductor/NAT-TestServer#readme",
   "devDependencies": {
-    "@aws-cdk/aws-ec2": "^1.36.1",
-    "@aws-cdk/aws-ecr": "^1.36.1",
-    "@aws-cdk/aws-ecs": "^1.36.1",
-    "@aws-cdk/aws-events-targets": "^1.36.1",
-    "@aws-cdk/aws-iam": "^1.36.1",
-    "@aws-cdk/aws-lambda": "^1.36.1",
-    "@aws-cdk/aws-s3": "^1.36.1",
-    "@aws-cdk/core": "^1.36.1",
+    "@aws-cdk/aws-ec2": "^1.37.0",
+    "@aws-cdk/aws-ecr": "^1.37.0",
+    "@aws-cdk/aws-ecs": "^1.37.0",
+    "@aws-cdk/aws-events-targets": "^1.37.0",
+    "@aws-cdk/aws-iam": "^1.37.0",
+    "@aws-cdk/aws-lambda": "^1.37.0",
+    "@aws-cdk/aws-s3": "^1.37.0",
+    "@aws-cdk/core": "^1.37.0",
     "@bifravst/code-style": "^7.1.10",
     "@bifravst/package-layered-lambdas": "^3.8.13",
     "@commitlint/cli": "^8.3.5",
     "@commitlint/config-angular": "^8.3.4",
     "@types/aws-lambda": "^8.10.51",
-    "@types/node": "^13.13.4",
-    "aws-cdk": "^1.36.1",
+    "@types/node": "^13.13.5",
+    "aws-cdk": "^1.37.0",
     "husky": "^4.2.5",
     "lint-staged": "^10.2.2",
     "prettier": "^2.0.5",
@@ -69,6 +69,8 @@
     ]
   },
   "dependencies": {
-    "aws-sdk": "^2.668.0"
+    "aws-sdk": "^2.671.0",
+    "date-fns": "^2.13.0",
+    "e118-iin-list": "^1.4.0"
   }
 }

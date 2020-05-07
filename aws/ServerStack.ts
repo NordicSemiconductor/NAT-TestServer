@@ -2,6 +2,9 @@ import * as CloudFormation from '@aws-cdk/core'
 import * as IAM from '@aws-cdk/aws-iam'
 import * as S3 from '@aws-cdk/aws-s3'
 import * as ECR from '@aws-cdk/aws-ecr'
+import * as CloudWatchLogs from '@aws-cdk/aws-logs'
+import * as Events from '@aws-cdk/aws-events'
+import * as EventTargets from '@aws-cdk/aws-events-targets'
 import * as Lambda from '@aws-cdk/aws-lambda'
 import { CD } from './CD'
 import { LayeredLambdas } from '@bifravst/package-layered-lambdas'
@@ -70,6 +73,66 @@ export class ServerStack extends CloudFormation.Stack {
 		new CloudFormation.CfnOutput(this, 'userSecretAccessKey', {
 			value: accessKey.attrSecretAccessKey,
 			exportName: `${this.stackName}:userSecretAccessKey`,
+		})
+
+		// Concatenate the log files
+
+		const concatenateLogFiles = new Lambda.Function(
+			this,
+			'concatenateLogFiles',
+			{
+				layers: [baseLayer],
+				handler: 'index.handler',
+				runtime: Lambda.Runtime.NODEJS_12_X,
+				timeout: CloudFormation.Duration.seconds(900),
+				memorySize: 1792,
+				code: Lambda.Code.bucket(
+					sourceCodeBucket,
+					args.lambdas.lambdaZipFileNames.concatenateLogFiles,
+				),
+				description:
+					'Runs every hour and concatenates the raw device messages so it is more performant for Athena to query them.',
+				initialPolicy: [
+					new IAM.PolicyStatement({
+						resources: ['*'],
+						actions: [
+							'logs:CreateLogGroup',
+							'logs:CreateLogStream',
+							'logs:PutLogEvents',
+						],
+					}),
+					new IAM.PolicyStatement({
+						resources: [bucket.bucketArn, `${bucket.bucketArn}/*`],
+						actions: [
+							's3:ListBucket',
+							's3:GetObject',
+							's3:PutObject',
+							's3:DeleteObject',
+						],
+					}),
+				],
+				environment: {
+					BUCKET_NAME: bucket.bucketName,
+				},
+			},
+		)
+
+		new CloudWatchLogs.LogGroup(this, `concatenateLogFilesLogGroup`, {
+			removalPolicy: CloudFormation.RemovalPolicy.DESTROY,
+			logGroupName: `/aws/lambda/${concatenateLogFiles.functionName}`,
+			retention: CloudWatchLogs.RetentionDays.ONE_WEEK,
+		})
+
+		const rule = new Events.Rule(this, 'invokeConcatenateMessagesRule', {
+			schedule: Events.Schedule.expression('rate(1 hour)'),
+			description: 'Invoke the lambda which concatenates the log messages',
+			enabled: true,
+			targets: [new EventTargets.LambdaFunction(concatenateLogFiles)],
+		})
+
+		concatenateLogFiles.addPermission('InvokeByEvents', {
+			principal: new IAM.ServicePrincipal('events.amazonaws.com'),
+			sourceArn: rule.ruleArn,
 		})
 
 		// Continuous deployment

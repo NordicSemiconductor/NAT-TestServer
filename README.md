@@ -192,6 +192,6 @@ deployment.
 Publish a new version of the image to ECR (see above), then trigger a new
 deployment:
 
-    SERVICE_ID=`aws cloudformation describe-stacks --stack-name ${STACK_ID}-ecr | jq -r '.Stacks[0].Outputs[] | select(.OutputKey == "fargateServiceArn") | .OutputValue'`
-    CLUSTER_NAME=`aws cloudformation describe-stacks --stack-name ${STACK_ID}-ecr | jq -r '.Stacks[0].Outputs[] | select(.OutputKey == "clusterArn") | .OutputValue'`
+    SERVICE_ID=`aws cloudformation describe-stacks --stack-name ${STACK_ID} | jq -r '.Stacks[0].Outputs[] | select(.OutputKey == "fargateServiceArn") | .OutputValue'`
+    CLUSTER_NAME=`aws cloudformation describe-stacks --stack-name ${STACK_ID} | jq -r '.Stacks[0].Outputs[] | select(.OutputKey == "clusterArn") | .OutputValue'`
     aws ecs update-service --service $SERVICE_ID --cluster $CLUSTER_NAME --force-new-deployment

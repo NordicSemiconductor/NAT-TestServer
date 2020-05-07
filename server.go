@@ -90,7 +90,7 @@ func saveLog(awsBucket string, prefix string) {
 			return
 		}
 
-		key := fmt.Sprintf("%s/%s-%s-%s.json", i.Timestamp.Format("2006/01/02"), i.IP, i.Timestamp.Format("150405"), newUUID)
+		key := fmt.Sprintf("%s/%s-%s-%s.json", i.Timestamp.Format("2006/01/02/15"), i.IP, i.Timestamp.Format("150405"), newUUID)
 		log.Printf("Uploading %s: %s", key, buffer)
 
 		ctx := context.Background()
