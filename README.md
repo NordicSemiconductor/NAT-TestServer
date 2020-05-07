@@ -144,7 +144,7 @@ Install dependencies
 
 Set the ID of the stack
 
-    export STACK_ID="${STACK_ID:-nat-test-resources}"
+    export STACK_NAME="${STACK_NAME:-nat-test-resources}"
 
 Prepare the account for CDK resources:
 
@@ -153,19 +153,19 @@ Prepare the account for CDK resources:
 
 Deploy the ECR stack to an AWS Account
 
-    npx cdk -a 'node dist/cdk-ecr.js' deploy ${STACK_ID}-ecr
+    npx cdk -a 'node dist/cdk-ecr.js' deploy ${STACK_NAME}-ecr
 
 Publish the docker image to AWS Elastic Container Registry
 
-    ECR_REPOSITORY_NAME=`aws cloudformation describe-stacks --stack-name ${STACK_ID}-ecr | jq -r '.Stacks[0].Outputs[] | select(.OutputKey == "cdEcrRepositoryName") | .OutputValue'`
-    ECR_REPOSITORY_URI=`aws cloudformation describe-stacks --stack-name ${STACK_ID}-ecr | jq -r '.Stacks[0].Outputs[] | select(.OutputKey == "cdEcrRepositoryUri") | .OutputValue'`
+    ECR_REPOSITORY_NAME=`aws cloudformation describe-stacks --stack-name ${STACK_NAME}-ecr | jq -r '.Stacks[0].Outputs[] | select(.OutputKey == "cdEcrRepositoryName") | .OutputValue'`
+    ECR_REPOSITORY_URI=`aws cloudformation describe-stacks --stack-name ${STACK_NAME}-ecr | jq -r '.Stacks[0].Outputs[] | select(.OutputKey == "cdEcrRepositoryUri") | .OutputValue'`
     aws ecr get-login-password --region ${AWS_REGION} | docker login --username AWS --password-stdin ${ECR_REPOSITORY_URI}
     docker tag nordicsemiconductor/nat-testserver:latest ${ECR_REPOSITORY_URI}:latest
     docker push ${ECR_REPOSITORY_URI}:latest
 
 Deploy the server stack to an AWS account
 
-    npx cdk deploy $STACK_ID
+    npx cdk deploy $STACK_NAME
 
 ## Continuous Deployment
 
@@ -192,6 +192,6 @@ deployment.
 Publish a new version of the image to ECR (see above), then trigger a new
 deployment:
 
-    SERVICE_ID=`aws cloudformation describe-stacks --stack-name ${STACK_ID} | jq -r '.Stacks[0].Outputs[] | select(.OutputKey == "fargateServiceArn") | .OutputValue'`
-    CLUSTER_NAME=`aws cloudformation describe-stacks --stack-name ${STACK_ID} | jq -r '.Stacks[0].Outputs[] | select(.OutputKey == "clusterArn") | .OutputValue'`
+    SERVICE_ID=`aws cloudformation describe-stacks --stack-name ${STACK_NAME} | jq -r '.Stacks[0].Outputs[] | select(.OutputKey == "fargateServiceArn") | .OutputValue'`
+    CLUSTER_NAME=`aws cloudformation describe-stacks --stack-name ${STACK_NAME} | jq -r '.Stacks[0].Outputs[] | select(.OutputKey == "clusterArn") | .OutputValue'`
     aws ecs update-service --service $SERVICE_ID --cluster $CLUSTER_NAME --force-new-deployment
