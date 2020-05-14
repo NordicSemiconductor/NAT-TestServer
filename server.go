@@ -167,6 +167,11 @@ func handleUDP(pc net.PacketConn, addr net.Addr, buffer []byte) {
 	updClientTimeouts.Mux.Unlock()
 	if ok {
 		v.Timeout.Stop()
+		if logEntry.Message.Interval <= v.Log.Message.Interval {
+			// The device did not receive our response and now starts with the binary search
+			// so it will send a message, but with a lower interval
+			v.Log.Timeout = true
+		}
 		writeLog <- v.Log
 	}
 

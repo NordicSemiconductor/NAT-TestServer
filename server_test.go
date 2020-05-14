@@ -7,7 +7,6 @@ import (
 	"log"
 	"net"
 	"os"
-	"strconv"
 	"testing"
 	"time"
 
@@ -18,15 +17,14 @@ import (
 	"github.com/stretchr/testify/assert"
 )
 
-const testInterval = 5
 const testIPv4 = "0.0.0.0"
 const testIPv6 = "0000:0000:0000:0000:0000:0000:0000:0000"
 
 var testCases [][]byte = [][]byte{
-	[]byte("{\"op\":\"24201\",\"ip\":[\"" + testIPv4 + "\"],\"cell_id\":21229824,\"ue_mode\":2,\"lte_mode\":1,\"nbiot_mode\":1,\"iccid\":\"8931089318104314834F\",\"imei\":\"352656100367872\",\"interval\":" + strconv.Itoa(testInterval) + "}\n"),
-	[]byte("{\"op\":\"24201\",\"ip\":[\"" + testIPv4 + "\"],\"cell_id\":21229824,\"ue_mode\":2,\"lte_mode\":1,\"nbiot_mode\":1,\"iccid\":\"8931089318104314834\",\"imei\":\"352656100367872\",\"interval\":" + strconv.Itoa(testInterval) + "}\n"),
-	[]byte("{\"op\":\"24201\",\"ip\":[\"" + testIPv6 + "\"],\"cell_id\":21229824,\"ue_mode\":2,\"lte_mode\":1,\"nbiot_mode\":1,\"iccid\":\"8931089318104314834F\",\"imei\":\"352656100367872\",\"interval\":" + strconv.Itoa(testInterval) + "}\n"),
-	[]byte("{\"op\":\"242011\",\"ip\":[\"" + testIPv4 + "\",\"" + testIPv6 + "\"],\"cell_id\":21229824,\"ue_mode\":2,\"lte_mode\":1,\"nbiot_mode\":1,\"iccid\":\"8931089318104314834F\",\"imei\":\"352656100367872\",\"interval\":" + strconv.Itoa(testInterval) + "}\n"),
+	[]byte("{\"op\":\"24201\",\"ip\":[\"" + testIPv4 + "\"],\"cell_id\":21229824,\"ue_mode\":2,\"lte_mode\":1,\"nbiot_mode\":1,\"iccid\":\"8931089318104314834F\",\"imei\":\"352656100367872\",\"interval\":1}\n"),
+	[]byte("{\"op\":\"24201\",\"ip\":[\"" + testIPv4 + "\"],\"cell_id\":21229824,\"ue_mode\":2,\"lte_mode\":1,\"nbiot_mode\":1,\"iccid\":\"8931089318104314834\",\"imei\":\"352656100367872\",\"interval\":2}\n"),
+	[]byte("{\"op\":\"24201\",\"ip\":[\"" + testIPv6 + "\"],\"cell_id\":21229824,\"ue_mode\":2,\"lte_mode\":1,\"nbiot_mode\":1,\"iccid\":\"8931089318104314834F\",\"imei\":\"352656100367872\",\"interval\":3}\n"),
+	[]byte("{\"op\":\"242011\",\"ip\":[\"" + testIPv4 + "\",\"" + testIPv6 + "\"],\"cell_id\":21229824,\"ue_mode\":2,\"lte_mode\":1,\"nbiot_mode\":1,\"iccid\":\"8931089318104314834F\",\"imei\":\"352656100367872\",\"interval\":4}\n"),
 }
 var errorCases [][]byte = [][]byte{
 	[]byte("{\"op\":,\"ip\":\"10.160.73.64\",\"cell_id\":21229824,\"ue_mode\":2,\"lte_mode\":1,\"nbiot_mode\":1,\"iccid\":\"8931089318104314834F\",\"imei\":\"352656100367872\",\"interval\":10}"),
@@ -94,7 +92,7 @@ func TCPFunc(t *testing.T) {
 	assert.NoError(err, "It should be able to connect to the server")
 	defer conn.Close()
 
-	for _, v := range testCases {
+	for i, v := range testCases {
 
 		if _, err = conn.Write(v); err != nil {
 			conn.Close()
@@ -102,7 +100,7 @@ func TCPFunc(t *testing.T) {
 			return
 		}
 
-		timer := time.NewTimer(time.Duration(testInterval+1) * time.Second)
+		timer := time.NewTimer(time.Duration(i+5) * time.Second)
 		go func() {
 			select {
 			case <-timer.C:
@@ -139,14 +137,14 @@ func UDPFunc(t *testing.T) {
 	assert.NoError(err, "It should be able to connect to the server")
 	defer conn.Close()
 
-	for _, v := range testCases {
+	for i, v := range testCases {
 		if _, err = conn.Write(v); err != nil {
 			conn.Close()
 			t.Error("Failed to write")
 			return
 		}
 
-		timer := time.NewTimer(time.Duration(testInterval+1) * time.Second)
+		timer := time.NewTimer(time.Duration(i+5) * time.Second)
 		go func() {
 			select {
 			case <-timer.C:
