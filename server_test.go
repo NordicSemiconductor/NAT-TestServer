@@ -208,5 +208,5 @@ func TestOutput(t *testing.T) {
 	assert.Equal(threadCount*2*len(testCases), foundCount, "The number of log entries should be equal.")
 	// The TCP messages will not timeout because the server sends the response in sync, while for UDP it waits for the *next* message to arrive before registering a success/timeout.
 	// This message never arrives, because the test client is terminated after the last test case.
-	assert.Equal(threadCount, timedOutCount, "Only the last UDP message should be registered as a timeout")
+	assert.Equal(threadCount*2, timedOutCount, "The last UDP and TCP messages should be registered as a timeout")
 }
