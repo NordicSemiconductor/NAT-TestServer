@@ -45,7 +45,7 @@ execute the command
 
 ```
 go get -v -t -d ./...
-go test
+go test -v
 ```
 
 or add the `-v` option for more detailed output.
