@@ -167,6 +167,11 @@ func handleUDP(pc net.PacketConn, addr net.Addr, buffer []byte) {
 	updClientTimeouts.Mux.Unlock()
 	if ok {
 		v.Timeout.Stop()
+		if logEntry.Message.Interval <= v.Log.Message.Interval {
+			// The device did not receive our response and now starts with the binary search
+			// so it will send a message, but with a lower interval
+			v.Log.Timeout = true
+		}
 		writeLog <- v.Log
 	}
 
@@ -203,7 +208,16 @@ func handleTCP(conn net.Conn) {
 		if err != nil {
 			log.Printf("Error reading TCP connection %s, error: %s", conn.RemoteAddr().String(), err.Error())
 			conn.Close()
+			if logEntry.Protocol != "" {
+				// Store log from previous interval
+				logEntry.Timeout = true
+				writeLog <- logEntry
+			}
 			break
+		}
+		if logEntry.Protocol != "" {
+			// Store log from previous interval
+			writeLog <- logEntry
 		}
 
 		var retBuffer []byte
@@ -223,7 +237,6 @@ func handleTCP(conn net.Conn) {
 			conn.Close()
 			break
 		}
-		writeLog <- logEntry
 		log.Printf("TCP Packet sent to %s\n", conn.RemoteAddr().String())
 	}
 }
