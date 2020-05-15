@@ -290,9 +290,11 @@ func main() {
 	writeLog = make(chan NATLogEntry)
 	updClientTimeouts = udpClientTimeoutMap{Map: make(map[string]udpClientTimeout)}
 
-	absPath, _ := filepath.Abs(schemaFile)
-	absPath = "file:///" + strings.ReplaceAll(absPath, "\\", "/")
-	schemaLoader = gojsonschema.NewReferenceLoader(absPath)
+	absPath, err := filepath.Abs(schemaFile)
+	if err != nil {
+		log.Fatal(err)
+	}
+	schemaLoader = gojsonschema.NewReferenceLoader(fmt.Sprintf("file://%s", absPath))
 
 	pc, err := net.ListenPacket("udp", fmt.Sprintf(":%d", udpPort))
 	if err != nil {
