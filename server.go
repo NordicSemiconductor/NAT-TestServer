@@ -37,11 +37,12 @@ type deviceMessage struct {
 
 // NATLogEntry gets logged to S3
 type NATLogEntry struct {
-	Protocol  string
-	IP        string
-	Timeout   bool
-	Timestamp time.Time
-	Message   deviceMessage
+	Protocol      string
+	IP            string
+	Timeout       bool
+	Timestamp     time.Time
+	Message       deviceMessage
+	ServerVersion string
 }
 
 type udpClientTimeout struct {
@@ -63,7 +64,7 @@ const maxBufferSize = 256
 const schemaFile = "schema.json"
 const timeFormat = "2006-01-02T15:04:05.00-0700"
 
-var genericErrorMessage []byte = []byte("Error occured.\nConnection closed.\n")
+var genericErrorMessage []byte = []byte(fmt.Sprintf("Error occured.\nConnection closed.\nVersion: %s\n", version))
 var writeLog chan NATLogEntry
 var schemaLoader gojsonschema.JSONLoader
 
@@ -145,8 +146,10 @@ func HandleData(buffer []byte, protocol string, addr string) ([]byte, NATLogEntr
 	time.Sleep(time.Duration(message.Interval) * time.Second)
 
 	endTime := time.Now().Format(timeFormat)
-	retString := "Interval: " + strconv.Itoa(message.Interval) + "\nReturned: " + endTime + "\n"
-	saveData := NATLogEntry{Timestamp: timestamp, Protocol: protocol, IP: addr, Timeout: false, Message: message}
+	retString := fmt.Sprintf(
+		"Interval: %s\nReturned: %s\nVersion:  %s\n", strconv.Itoa(message.Interval), endTime, version,
+	)
+	saveData := NATLogEntry{Timestamp: timestamp, Protocol: protocol, IP: addr, Timeout: false, Message: message, ServerVersion: version}
 	return []byte(retString), saveData, nil
 }
 
