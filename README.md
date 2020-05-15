@@ -48,8 +48,6 @@ go get -v -t -d ./...
 go test -v
 ```
 
-or add the `-v` option for more detailed output.
-
 ## Running in Docker
 
     docker build -t nordicsemiconductor/nat-testserver .
