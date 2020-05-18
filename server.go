@@ -43,6 +43,7 @@ type NATLogEntry struct {
 	Timestamp     time.Time
 	Message       deviceMessage
 	ServerVersion string
+	TraceID       string
 }
 
 type udpClientTimeout struct {
@@ -85,13 +86,7 @@ func saveLog(awsBucket string, prefix string) {
 			return
 		}
 
-		newUUID, err := uuid.NewRandom()
-		if err != nil {
-			log.Printf("Failed to create new UUID: %d\n", err)
-			return
-		}
-
-		key := fmt.Sprintf("%s/%s-%s-%s.json", i.Timestamp.Format("2006/01/02/15"), i.IP, i.Timestamp.Format("150405"), newUUID)
+		key := fmt.Sprintf("%s/%s-%s-%s.json", i.Timestamp.Format("2006/01/02/15"), i.IP, i.Timestamp.Format("150405"), i.TraceID)
 		log.Printf("Uploading %s: %s", key, buffer)
 
 		ctx := context.Background()
@@ -146,10 +141,25 @@ func HandleData(buffer []byte, protocol string, addr string) ([]byte, NATLogEntr
 	time.Sleep(time.Duration(message.Interval) * time.Second)
 
 	endTime := time.Now().Format(timeFormat)
+
+	traceID, err := uuid.NewRandom()
+	if err != nil {
+		log.Printf("Failed to create new UUID: %d\n", err)
+		return nil, NATLogEntry{}, err
+	}
+
 	retString := fmt.Sprintf(
-		"Interval: %s\nReturned: %s\nVersion:  %s\n", strconv.Itoa(message.Interval), endTime, version,
+		"Interval: %s\nReturned: %s\nVersion:  %s\nTraceID:  %s\n", strconv.Itoa(message.Interval), endTime, version, traceID,
 	)
-	saveData := NATLogEntry{Timestamp: timestamp, Protocol: protocol, IP: addr, Timeout: false, Message: message, ServerVersion: version}
+	saveData := NATLogEntry{
+		Timestamp:     timestamp,
+		Protocol:      protocol,
+		IP:            addr,
+		Timeout:       false,
+		Message:       message,
+		ServerVersion: version,
+		TraceID:       traceID.String(),
+	}
 	return []byte(retString), saveData, nil
 }
 
