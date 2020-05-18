@@ -122,6 +122,12 @@ func saveLog(awsBucket string, prefix string) {
 func HandleData(buffer []byte, protocol string, addr string) ([]byte, NATLogEntry, error) {
 	timestamp := time.Now()
 
+	traceID, err := uuid.NewRandom()
+	if err != nil {
+		log.Printf("Failed to create new UUID: %d\n", err)
+		return nil, NATLogEntry{}, err
+	}
+
 	documentLoader := gojsonschema.NewStringLoader(string(buffer))
 	result, err := gojsonschema.Validate(schemaLoader, documentLoader)
 	if err != nil {
@@ -130,23 +136,17 @@ func HandleData(buffer []byte, protocol string, addr string) ([]byte, NATLogEntr
 		return nil, NATLogEntry{}, errors.New("Message uses wrong format")
 	}
 
-	log.Printf("%s Message received from %s\n", protocol, addr)
-
 	var message deviceMessage
 	err = json.Unmarshal(buffer, &message)
 	if err != nil {
 		return nil, NATLogEntry{}, err
 	}
 
+	log.Printf("[%s] %s Message received from %s: interval %s\n", traceID, protocol, addr, strconv.Itoa(message.Interval))
+
 	time.Sleep(time.Duration(message.Interval) * time.Second)
 
 	endTime := time.Now().Format(timeFormat)
-
-	traceID, err := uuid.NewRandom()
-	if err != nil {
-		log.Printf("Failed to create new UUID: %d\n", err)
-		return nil, NATLogEntry{}, err
-	}
 
 	retString := fmt.Sprintf(
 		"Interval: %s\nReturned: %s\nVersion:  %s\nTraceID:  %s\n", strconv.Itoa(message.Interval), endTime, version, traceID,
@@ -173,8 +173,6 @@ func handleUDP(pc net.PacketConn, addr net.Addr, buffer []byte) {
 		return
 	}
 
-	log.Printf("UDP Packet received from %s\n", addr.String())
-
 	updClientTimeouts.Mux.Lock()
 	v, ok := updClientTimeouts.Map[addr.String()]
 	delete(updClientTimeouts.Map, addr.String())
@@ -191,10 +189,10 @@ func handleUDP(pc net.PacketConn, addr net.Addr, buffer []byte) {
 
 	_, err = pc.WriteTo(retBuffer, addr)
 	if err != nil {
-		log.Printf("UDP write to %s failed, error: %s\n", addr.String(), err.Error())
+		log.Printf("[%s] UDP write to %s failed, error: %s\n", logEntry.TraceID, addr.String(), err.Error())
 		return
 	}
-	log.Printf("UDP Packet sent to %s\n", addr.String())
+	log.Printf("[%s] UDP Packet sent to %s. Interval: %s.\n", logEntry.TraceID, addr.String(), strconv.Itoa(logEntry.Message.Interval))
 
 	timer := time.NewTimer(newUDPMessageTimeoutInSeconds * time.Second)
 	updClientTimeouts.Mux.Lock()
@@ -205,7 +203,7 @@ func handleUDP(pc net.PacketConn, addr net.Addr, buffer []byte) {
 		updClientTimeouts.Mux.Lock()
 		delete(updClientTimeouts.Map, addr.String())
 		updClientTimeouts.Mux.Unlock()
-		log.Printf("UDP connection to %s timed out. Connection terminated.\n", addr)
+		log.Printf("[%s] UDP connection to %s timed out. Connection terminated. Interval: %s.\n", logEntry.TraceID, addr, strconv.Itoa(logEntry.Message.Interval))
 		logEntry.Timeout = true
 		writeLog <- logEntry
 	}
@@ -220,12 +218,14 @@ func handleTCP(conn net.Conn) {
 
 		n, err := conn.Read(buffer)
 		if err != nil {
-			log.Printf("Error reading TCP connection %s, error: %s", conn.RemoteAddr().String(), err.Error())
 			conn.Close()
 			if logEntry.Protocol != "" {
+				log.Printf("[%s] Error reading TCP connection %s, error: %s. Interval: %s.", logEntry.TraceID, conn.RemoteAddr().String(), err.Error(), strconv.Itoa(logEntry.Message.Interval))
 				// Store log from previous interval
 				logEntry.Timeout = true
 				writeLog <- logEntry
+			} else {
+				log.Printf("Error reading TCP connection %s, error: %s", conn.RemoteAddr().String(), err.Error())
 			}
 			break
 		}
@@ -245,13 +245,13 @@ func handleTCP(conn net.Conn) {
 
 		_, err = conn.Write(retBuffer)
 		if err != nil {
-			log.Printf("TCP write to %s failed. Connection terminated\n", conn.RemoteAddr().String())
+			log.Printf("[%s] TCP write to %s failed. Connection terminated. Interval: %s.\n", logEntry.TraceID, conn.RemoteAddr().String(), strconv.Itoa(logEntry.Message.Interval))
 			logEntry.Timeout = true
 			writeLog <- logEntry
 			conn.Close()
 			break
 		}
-		log.Printf("TCP Packet sent to %s\n", conn.RemoteAddr().String())
+		log.Printf("[%s] TCP Packet sent to %s. Interval: %s.\n", logEntry.TraceID, conn.RemoteAddr().String(), strconv.Itoa(logEntry.Message.Interval))
 	}
 }
 
