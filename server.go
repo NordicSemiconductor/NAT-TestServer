@@ -177,6 +177,7 @@ func handleUDP(pc net.PacketConn, addr net.Addr, buffer []byte) {
 
 	updClientTimeouts.Mux.Lock()
 	v, ok := updClientTimeouts.Map[addr.String()]
+	delete(updClientTimeouts.Map, addr.String())
 	updClientTimeouts.Mux.Unlock()
 	if ok {
 		v.Timeout.Stop()
