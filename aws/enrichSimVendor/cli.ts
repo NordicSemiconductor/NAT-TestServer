@@ -38,7 +38,10 @@ export const enrich = async () =>
 									.promise()
 									.then(async ({ Body }) => {
 										if (!Body) return
-										const messages = Body.toString().split('\n')
+										const messages = Body.toString()
+											.split('\n')
+											.map((s) => s.trim())
+											.filter((s) => s)
 										await s3
 											.putObject({
 												Bucket: bucketName,
