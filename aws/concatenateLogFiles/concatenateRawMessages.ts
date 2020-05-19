@@ -1,5 +1,6 @@
 import * as dateFns from 'date-fns'
 import * as path from 'path'
+import { v4 } from 'uuid'
 
 import { CollectFilesFn } from './collectFiles'
 import { ConcatenateFilesFn } from './concatenateFiles'
@@ -31,7 +32,7 @@ export const concatenateMessages = async ({
 				return dateFns.format(new Date(), "yyyy-MM-dd'T'HH") // No date found
 			},
 		}),
-		dateToFileName: (date) => `hours/${date}.txt`,
+		dateToFileName: (date) => `hours/${date}-${v4()}.txt`,
 	})
 	// Concatenate days
 	await concatDays({
@@ -46,7 +47,7 @@ export const concatenateMessages = async ({
 				return `${year}-${month}-${day}`
 			},
 		}),
-		dateToFileName: (date) => `days/${date}.txt`,
+		dateToFileName: (date) => `days/${date}-${v4()}.txt`,
 	})
 	// Concatenate months
 	await concatMonths({
@@ -60,7 +61,7 @@ export const concatenateMessages = async ({
 		}),
 		dateToFileName: (date) => {
 			const [year, month] = date.split('-')
-			return `months/${year}-${month}.txt`
+			return `months/${year}-${month}-${v4()}.txt`
 		},
 	})
 }

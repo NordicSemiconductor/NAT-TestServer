@@ -114,6 +114,7 @@ export class ServerStack extends CloudFormation.Stack {
 				environment: {
 					BUCKET_NAME: bucket.bucketName,
 				},
+				reservedConcurrentExecutions: 1,
 			},
 		)
 
