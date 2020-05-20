@@ -49,7 +49,7 @@ jobs:
         run: npx tsc
 
       - name: Update the stack itself
-        run: npx cdk deploy
+        run: npx cdk deploy --require-approval never
 
       - name: Cache AWS CLI
         id: cache-aws-cli-linux
