@@ -1,6 +1,10 @@
 name: Test Docker Image
 
 on:
+  push:
+    paths:
+      - Dockerfile
+      - .github/workflows/test-docker.yaml
   pull_request:
     paths:
       - Dockerfile
