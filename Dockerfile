@@ -12,7 +12,8 @@ FROM alpine:3.9.4
 RUN adduser -S -D -H server
 USER server
 COPY --from=builder /build /server
-COPY schema.json /server
+COPY nat_schema.json /server
+COPY at_schema.json /server
 EXPOSE 3051/tcp
 EXPOSE 3050/udp
 EXPOSE 3060/tcp
