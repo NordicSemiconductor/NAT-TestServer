@@ -7,6 +7,7 @@ import (
 	"log"
 	"net"
 	"os"
+	"strings"
 	"testing"
 	"time"
 
@@ -19,8 +20,9 @@ import (
 
 const testIPv4 = "0.0.0.0"
 const testIPv6 = "0000:0000:0000:0000:0000:0000:0000:0000"
+const testCmd = "AT+TESTING"
 
-var testCases [][]byte = [][]byte{
+var NATtestCases [][]byte = [][]byte{
 	[]byte("{\"op\":\"24201\",\"ip\":[\"" + testIPv4 + "\"],\"cell_id\":21229824,\"ue_mode\":2,\"lte_mode\":1,\"nbiot_mode\":1,\"iccid\":\"8931089318104314834F\",\"imei\":\"352656100367872\",\"interval\":1}\n"),
 	[]byte("{\"op\":\"24201\",\"ip\":[\"" + testIPv4 + "\"],\"cell_id\":21229824,\"ue_mode\":2,\"lte_mode\":1,\"nbiot_mode\":1,\"iccid\":\"8931089318104314834\",\"imei\":\"352656100367872\",\"interval\":2}\n"),
 	[]byte("{\"op\":\"24201\",\"ip\":[\"" + testIPv6 + "\"],\"cell_id\":21229824,\"ue_mode\":2,\"lte_mode\":1,\"nbiot_mode\":1,\"iccid\":\"8931089318104314834F\",\"imei\":\"352656100367872\",\"interval\":3}\n"),
@@ -49,6 +51,10 @@ var errorCases [][]byte = [][]byte{
 	[]byte("{\"op\":\"24201\",\"ip\":[\"10.160.73.64\"],\"cell_id\":21229824,\"ue_mode\":2,\"lte_mode\":1,\"nbiot_mode\":2,\"iccid\":\"8931089318104314834F\",\"imei\":\"352656100367872\",\"interval\":10}"),
 	[]byte("{\"op\":\"24201\",\"ip\":[\"10.160.73.64\"],\"cell_id\":21229824,\"ue_mode\":2,\"lte_mode\":1,\"nbiot_mode\":1,\"iccid\":\"8931089318104314834F\",\"imei\":\"3526561003678720\",\"interval\":10}"),
 }
+
+var ATTestCase []byte = []byte("{\"op\":\"24201\",\"iccid\":\"8931089318104314834F\",\"imei\":\"352656100367872\",\"cmd\":\"" + testCmd + "\",\"result\":\"+TESTING: 0,0,0\"}\n")
+
+const ATLogWaitTimeInSeconds = 20
 
 const threadCount = 3
 
@@ -92,7 +98,7 @@ func TCPFunc(t *testing.T) {
 	assert.NoError(err, "It should be able to connect to the server")
 	defer conn.Close()
 
-	for i, v := range testCases {
+	for i, v := range NATtestCases {
 
 		if _, err = conn.Write(v); err != nil {
 			conn.Close()
@@ -137,7 +143,7 @@ func UDPFunc(t *testing.T) {
 	assert.NoError(err, "It should be able to connect to the server")
 	defer conn.Close()
 
-	for i, v := range testCases {
+	for i, v := range NATtestCases {
 		if _, err = conn.Write(v); err != nil {
 			conn.Close()
 			t.Error("Failed to write")
@@ -164,6 +170,54 @@ func UDPFunc(t *testing.T) {
 	}
 }
 
+func TestAT(t *testing.T) {
+	assert := assert.New(t)
+
+	conn, err := net.Dial("tcp", ":3060")
+	assert.NoError(err, "It should be able to connect to the server")
+	defer conn.Close()
+
+	if _, err = conn.Write(ATTestCase); err != nil {
+		conn.Close()
+		t.Error("Failed to write")
+		return
+	}
+
+	// Wait to guarantee log entry has been written
+	time.Sleep(time.Duration(ATLogWaitTimeInSeconds) * time.Second)
+
+	tempBuf := make([]byte, 256)
+	n, err := conn.Read(tempBuf)
+	assert.NoError(err, "It should read the response")
+	assert.NotEqual(tempBuf[:n], genericErrorMessage, "it should return an error message")
+
+	sess, err := session.NewSession(&aws.Config{})
+	assert.NoError(err, "A session should be created")
+	svc := s3.New(sess, &aws.Config{})
+
+	resp, err := svc.ListObjectsV2(&s3.ListObjectsV2Input{Bucket: aws.String(os.Getenv("AWS_BUCKET")), Prefix: aws.String(testPrefix)})
+	assert.NoError(err, "Items in the bucket should be listed")
+
+	var foundCount = 0
+	for _, item := range resp.Contents {
+		obj, err := svc.GetObject(&s3.GetObjectInput{Bucket: aws.String(os.Getenv("AWS_BUCKET")), Key: aws.String(*item.Key)})
+		assert.NoError(err, "The item should be read")
+		body, err := ioutil.ReadAll(obj.Body)
+		assert.NoError(err, "The item's body should be read")
+
+		if strings.Contains(*item.Key, "ATLog") {
+			var log ATLogEntry
+			err = json.Unmarshal(body, &log)
+			assert.NoError(err, "The item should be parsed to JSON")
+			if log.Message.Cmd == testCmd {
+				foundCount++
+			}
+		}
+	}
+
+	assert.Equal(1, foundCount, "The number of log entries should be equal.")
+}
+
 func TestHandleData(t *testing.T) {
 	assert := assert.New(t)
 	for _, errorCase := range errorCases {
@@ -172,7 +226,7 @@ func TestHandleData(t *testing.T) {
 	}
 }
 
-func TestOutput(t *testing.T) {
+func TestNATLogEntries(t *testing.T) {
 	assert := assert.New(t)
 	// Wait for timeout + 10% for timeout packets to be written
 	time.Sleep(time.Duration(newUDPMessageTimeoutInSeconds*1.1) * time.Second)
@@ -192,18 +246,20 @@ func TestOutput(t *testing.T) {
 		body, err := ioutil.ReadAll(obj.Body)
 		assert.NoError(err, "The item's body should be read")
 
-		var log NATLogEntry
-		err = json.Unmarshal(body, &log)
-		assert.NoError(err, "The item should be parsed to JSON")
-		if log.Message.IP[0] == testIPv4 || log.Message.IP[0] == testIPv6 {
-			foundCount++
-		}
-		if log.Timeout {
-			timedOutCount++
+		if strings.Contains(*item.Key, "NATLog") {
+			var log NATLogEntry
+			err = json.Unmarshal(body, &log)
+			assert.NoError(err, "The item should be parsed to JSON")
+			if log.Message.IP[0] == testIPv4 || log.Message.IP[0] == testIPv6 {
+				foundCount++
+			}
+			if log.Timeout {
+				timedOutCount++
+			}
 		}
 	}
 
-	assert.Equal(threadCount*2*len(testCases), foundCount, "The number of log entries should be equal.")
+	assert.Equal(threadCount*2*len(NATtestCases), foundCount, "The number of log entries should be equal.")
 	// The TCP messages will not timeout because the server sends the response in sync, while for UDP it waits for the *next* message to arrive before registering a success/timeout.
 	// This message never arrives, because the test client is terminated after the last test case.
 	assert.Equal(threadCount*2, timedOutCount, "The last UDP and TCP messages should be registered as a timeout")
