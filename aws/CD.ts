@@ -103,6 +103,9 @@ export class CD extends CloudFormation.Resource {
 			containerPort: 3050,
 			protocol: ECS.Protocol.UDP,
 		})
+		container.addPortMappings({
+			containerPort: 3060,
+		})
 
 		const securityGroup = new EC2.SecurityGroup(this, 'natTestServer', {
 			vpc,
@@ -112,6 +115,7 @@ export class CD extends CloudFormation.Resource {
 		securityGroup.addEgressRule(EC2.Peer.anyIpv4(), EC2.Port.allTcp())
 		securityGroup.addIngressRule(EC2.Peer.anyIpv4(), EC2.Port.tcp(3051))
 		securityGroup.addIngressRule(EC2.Peer.anyIpv4(), EC2.Port.udp(3050))
+		securityGroup.addIngressRule(EC2.Peer.anyIpv4(), EC2.Port.tcp(3060))
 
 		this.fargateService = new ECS.FargateService(
 			this,

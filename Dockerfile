@@ -15,6 +15,7 @@ COPY --from=builder /build /server
 COPY schema.json /server
 EXPOSE 3051/tcp
 EXPOSE 3050/udp
+EXPOSE 3060/tcp
 WORKDIR /server
 CMD ["./server"]
 ARG AWS_BUCKET
