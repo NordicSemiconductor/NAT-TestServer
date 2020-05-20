@@ -1,0 +1,37 @@
+{
+    "type": "object",
+    "properties": {
+        "op": {
+            "description": "MCC/MNC: Country and network code of the current mobile network",
+            "type": "string",
+            "minLength": 5,
+            "maxLength": 6
+        },
+        "iccid": {
+            "description": "The SIM card's unique integrated circuit card identifier (ICCID)",
+            "type": "string",
+            "pattern": "^89[0-9]{17}([0-9]|F)?$"
+        },
+        "imei": {
+            "description": "The device's unique international mobile equipment identity (IMEI)",
+            "type": "string",
+            "pattern": "^[0-9]{15}$"
+        },
+        "cmd": {
+            "description": "The AT command that was executed",
+            "type": "string"
+        },
+        "result": {
+            "description": "The result of the executed AT command",
+            "type": "string"
+        }
+    },
+    "required": [
+        "op",
+        "iccid",
+        "imei",
+        "cmd",
+        "result"
+    ],
+    "additionalProperties": false
+}

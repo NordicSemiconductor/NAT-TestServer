@@ -35,6 +35,26 @@ type deviceMessage struct {
 	Interval  int      `json:"interval"`
 }
 
+type atMessage struct {
+	Operator string `json:"op"`
+	ICCID    string `json:"iccid"`
+	IMEI     string `json:"imei"`
+	Cmd      string `json:"cmd"`
+	Result   string `json:"result"`
+}
+
+type logEntry interface {
+	getKey() string
+}
+
+// ATLogEntry gets logged to S3
+type ATLogEntry struct {
+	IP            string
+	Timestamp     time.Time
+	Message       atMessage
+	ServerVersion string
+}
+
 // NATLogEntry gets logged to S3
 type NATLogEntry struct {
 	Protocol      string
@@ -56,21 +76,31 @@ type udpClientTimeoutMap struct {
 	Mux sync.Mutex
 }
 
-var udpPort = 3050
-var tcpPort = 3051
-var version = "0.0.0-development"
-
+const udpPort = 3050
+const tcpPort = 3051
+const atPort = 3060
+const version = "0.0.0-development"
 const newUDPMessageTimeoutInSeconds = 60
 const maxBufferSize = 256
-const schemaFile = "schema.json"
+const natSchemaFile = "nat_schema.json"
+const atSchemaFile = "at_schema.json"
 const timeFormat = "2006-01-02T15:04:05.00-0700"
 
 var genericErrorMessage []byte = []byte(fmt.Sprintf("Error occured.\nConnection closed.\nVersion: %s\n", version))
-var writeLog chan NATLogEntry
-var schemaLoader gojsonschema.JSONLoader
+var writeLog chan logEntry
+var natSchemaLoader gojsonschema.JSONLoader
+var atSchemaLoader gojsonschema.JSONLoader
 
 // updClientTimeouts stores timers to wait for UDP client responses
 var updClientTimeouts udpClientTimeoutMap
+
+func (e NATLogEntry) getKey() string {
+	return fmt.Sprintf("%s/%s/%s-%s-%s.json", "NATLog", e.Timestamp.Format("2006/01/02/15"), e.IP, e.Timestamp.Format("150405"), e.TraceID)
+}
+
+func (e ATLogEntry) getKey() string {
+	return fmt.Sprintf("%s/%s/%s-%s.json", "ATLog", e.Timestamp.Format("2006/01/02/15"), e.IP, e.Timestamp.Format("150405"))
+}
 
 func saveLog(awsBucket string, prefix string) {
 	sess, err := session.NewSession(&aws.Config{})
@@ -86,7 +116,7 @@ func saveLog(awsBucket string, prefix string) {
 			return
 		}
 
-		key := fmt.Sprintf("%s/%s-%s-%s.json", i.Timestamp.Format("2006/01/02/15"), i.IP, i.Timestamp.Format("150405"), i.TraceID)
+		key := i.getKey()
 		log.Printf("Uploading %s: %s", key, buffer)
 
 		ctx := context.Background()
@@ -118,6 +148,52 @@ func saveLog(awsBucket string, prefix string) {
 	}
 }
 
+// HandleAT Handle AT cmd messages
+func handleAT(conn net.Conn) {
+	for {
+		buffer := make([]byte, maxBufferSize)
+
+		n, err := conn.Read(buffer)
+		if err != nil {
+			conn.Close()
+			log.Printf("Error reading TCP connection %s, error: %s", conn.RemoteAddr().String(), err.Error())
+			break
+		}
+		timestamp := time.Now()
+
+		documentLoader := gojsonschema.NewStringLoader(string(buffer))
+		result, err := gojsonschema.Validate(atSchemaLoader, documentLoader)
+		if err != nil {
+			log.Printf("JSON validation error: %d\nConnection to %s terminated.\n", err, conn.RemoteAddr().String())
+			conn.Close()
+			break
+		} else if !result.Valid() {
+			log.Printf("Invalid AT-cmd JSON format.\nConnection to %s terminated.\n", conn.RemoteAddr().String())
+			conn.Close()
+			break
+		}
+
+		var message atMessage
+		err = json.Unmarshal(buffer[:n-1], &message)
+		if err != nil {
+			log.Printf("Failed to unmarshal JSON, error: %d.\n", err)
+			conn.Close()
+			break
+		}
+
+		log.Printf("AT-cmd Message received from %s\n", conn.RemoteAddr().String())
+
+		saveData := ATLogEntry{
+			IP:            conn.RemoteAddr().String(),
+			Timestamp:     timestamp,
+			Message:       message,
+			ServerVersion: version,
+		}
+
+		writeLog <- saveData
+	}
+}
+
 // HandleData read incoming data from the handed buffer and pause execution based on the requested interval
 func HandleData(buffer []byte, protocol string, addr string) ([]byte, NATLogEntry, error) {
 	timestamp := time.Now()
@@ -129,7 +205,7 @@ func HandleData(buffer []byte, protocol string, addr string) ([]byte, NATLogEntr
 	}
 
 	documentLoader := gojsonschema.NewStringLoader(string(buffer))
-	result, err := gojsonschema.Validate(schemaLoader, documentLoader)
+	result, err := gojsonschema.Validate(natSchemaLoader, documentLoader)
 	if err != nil {
 		return nil, NATLogEntry{}, err
 	} else if !result.Valid() {
@@ -209,7 +285,7 @@ func handleUDP(pc net.PacketConn, addr net.Addr, buffer []byte) {
 	}
 }
 
-// handleTCP handle UDP messages.
+// handleTCP handle TCP messages.
 // Timouts are detected by checking for successfull TCP writes.
 func handleTCP(conn net.Conn) {
 	var logEntry NATLogEntry
@@ -280,6 +356,17 @@ func acceptTCP(l net.Listener) {
 	}
 }
 
+func acceptAT(l net.Listener) {
+	for {
+		conn, err := l.Accept()
+		if err != nil {
+			continue
+		}
+
+		go handleAT(conn)
+	}
+}
+
 func main() {
 	log.SetFlags(0) // Do not prefix with date, this is handled by the operating system
 
@@ -301,15 +388,23 @@ func main() {
 	}
 
 	done := make(chan bool)
-	writeLog = make(chan NATLogEntry)
+	writeLog = make(chan logEntry)
 	updClientTimeouts = udpClientTimeoutMap{Map: make(map[string]udpClientTimeout)}
 
-	absPath, err := filepath.Abs(schemaFile)
+	// Initialize the schema loaders
+	absPath, err := filepath.Abs(natSchemaFile)
 	if err != nil {
 		log.Fatal(err)
 	}
-	schemaLoader = gojsonschema.NewReferenceLoader(fmt.Sprintf("file://%s", absPath))
+	natSchemaLoader = gojsonschema.NewReferenceLoader(fmt.Sprintf("file://%s", absPath))
 
+	absPath, err = filepath.Abs(atSchemaFile)
+	if err != nil {
+		log.Fatal(err)
+	}
+	atSchemaLoader = gojsonschema.NewReferenceLoader(fmt.Sprintf("file://%s", absPath))
+
+	// Start listening on ports
 	pc, err := net.ListenPacket("udp", fmt.Sprintf(":%d", udpPort))
 	if err != nil {
 		log.Fatal(err)
@@ -320,11 +415,18 @@ func main() {
 		log.Fatal(err)
 	}
 
+	atL, err := net.Listen("tcp", fmt.Sprintf(":%d", atPort))
+	if err != nil {
+		log.Fatal(err)
+	}
+
 	defer pc.Close()
 	defer l.Close()
+	defer atL.Close()
 
 	go acceptUDP(pc)
 	go acceptTCP(l)
+	go acceptAT(atL)
 
 	logPrefix := os.Getenv("LOG_PREFIX")
 	go saveLog(awsBucket, logPrefix)
