@@ -53,6 +53,7 @@ type ATLogEntry struct {
 	Timestamp     time.Time
 	Message       atMessage
 	ServerVersion string
+	TraceID       string
 }
 
 // NATLogEntry gets logged to S3
@@ -76,10 +77,11 @@ type udpClientTimeoutMap struct {
 	Mux sync.Mutex
 }
 
-const udpPort = 3050
-const tcpPort = 3051
-const atPort = 3060
-const version = "0.0.0-development"
+var udpPort = 3050
+var tcpPort = 3051
+var atPort = 3060
+var version = "0.0.0-development"
+
 const newUDPMessageTimeoutInSeconds = 60
 const maxBufferSize = 256
 const natSchemaFile = "nat_schema.json"
@@ -99,7 +101,7 @@ func (e NATLogEntry) getKey() string {
 }
 
 func (e ATLogEntry) getKey() string {
-	return fmt.Sprintf("%s/%s/%s-%s.json", "ATLog", e.Timestamp.Format("2006/01/02/15"), e.IP, e.Timestamp.Format("150405"))
+	return fmt.Sprintf("%s/%s/%s-%s-%s.json", "ATLog", e.Timestamp.Format("2006/01/02/15"), e.IP, e.Timestamp.Format("150405"), e.TraceID)
 }
 
 func saveLog(awsBucket string, prefix string) {
@@ -161,14 +163,24 @@ func handleAT(conn net.Conn) {
 		}
 		timestamp := time.Now()
 
+		traceID, err := uuid.NewRandom()
+		if err != nil {
+			log.Printf("Failed to create new UUID: %d\n", err)
+			conn.Write(genericErrorMessage)
+			conn.Close()
+			break
+		}
+
 		documentLoader := gojsonschema.NewStringLoader(string(buffer))
 		result, err := gojsonschema.Validate(atSchemaLoader, documentLoader)
 		if err != nil {
 			log.Printf("JSON validation error: %d\nConnection to %s terminated.\n", err, conn.RemoteAddr().String())
+			conn.Write(genericErrorMessage)
 			conn.Close()
 			break
 		} else if !result.Valid() {
 			log.Printf("Invalid AT-cmd JSON format.\nConnection to %s terminated.\n", conn.RemoteAddr().String())
+			conn.Write(genericErrorMessage)
 			conn.Close()
 			break
 		}
@@ -177,6 +189,7 @@ func handleAT(conn net.Conn) {
 		err = json.Unmarshal(buffer[:n-1], &message)
 		if err != nil {
 			log.Printf("Failed to unmarshal JSON, error: %d.\n", err)
+			conn.Write(genericErrorMessage)
 			conn.Close()
 			break
 		}
@@ -188,9 +201,15 @@ func handleAT(conn net.Conn) {
 			Timestamp:     timestamp,
 			Message:       message,
 			ServerVersion: version,
+			TraceID:       traceID.String(),
 		}
 
 		writeLog <- saveData
+
+		retString := fmt.Sprintf(
+			"AT-cmd message received.\nVersion:  %s\nTraceID:  %s\n", version, traceID,
+		)
+		conn.Write([]byte(retString))
 	}
 }
 

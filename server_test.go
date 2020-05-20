@@ -54,6 +54,8 @@ var errorCases [][]byte = [][]byte{
 
 var ATTestCase []byte = []byte("{\"op\":\"24201\",\"iccid\":\"8931089318104314834F\",\"imei\":\"352656100367872\",\"cmd\":\"" + testCmd + "\",\"result\":\"+TESTING: 0,0,0\"}\n")
 
+const ATLogWaitTimeInSeconds = 20
+
 const threadCount = 3
 
 var testPrefix string
@@ -180,6 +182,40 @@ func TestAT(t *testing.T) {
 		t.Error("Failed to write")
 		return
 	}
+
+	// Wait to guarantee log entry has been written
+	time.Sleep(time.Duration(ATLogWaitTimeInSeconds) * time.Second)
+
+	tempBuf := make([]byte, 256)
+	n, err := conn.Read(tempBuf)
+	assert.NoError(err, "It should read the response")
+	assert.NotEqual(tempBuf[:n], genericErrorMessage, "it should return an error message")
+
+	sess, err := session.NewSession(&aws.Config{})
+	assert.NoError(err, "A session should be created")
+	svc := s3.New(sess, &aws.Config{})
+
+	resp, err := svc.ListObjectsV2(&s3.ListObjectsV2Input{Bucket: aws.String(os.Getenv("AWS_BUCKET")), Prefix: aws.String(testPrefix)})
+	assert.NoError(err, "Items in the bucket should be listed")
+
+	var foundCount = 0
+	for _, item := range resp.Contents {
+		obj, err := svc.GetObject(&s3.GetObjectInput{Bucket: aws.String(os.Getenv("AWS_BUCKET")), Key: aws.String(*item.Key)})
+		assert.NoError(err, "The item should be read")
+		body, err := ioutil.ReadAll(obj.Body)
+		assert.NoError(err, "The item's body should be read")
+
+		if strings.Contains(*item.Key, "ATLog") {
+			var log ATLogEntry
+			err = json.Unmarshal(body, &log)
+			assert.NoError(err, "The item should be parsed to JSON")
+			if log.Message.Cmd == testCmd {
+				foundCount++
+			}
+		}
+	}
+
+	assert.Equal(1, foundCount, "The number of log entries should be equal.")
 }
 
 func TestHandleData(t *testing.T) {
@@ -190,7 +226,7 @@ func TestHandleData(t *testing.T) {
 	}
 }
 
-func TestOutput(t *testing.T) {
+func TestNATLogEntries(t *testing.T) {
 	assert := assert.New(t)
 	// Wait for timeout + 10% for timeout packets to be written
 	time.Sleep(time.Duration(newUDPMessageTimeoutInSeconds*1.1) * time.Second)
@@ -220,17 +256,10 @@ func TestOutput(t *testing.T) {
 			if log.Timeout {
 				timedOutCount++
 			}
-		} else if strings.Contains(*item.Key, "ATLog") {
-			var log ATLogEntry
-			err = json.Unmarshal(body, &log)
-			assert.NoError(err, "The item should be parsed to JSON")
-			if log.Message.Cmd == testCmd {
-				foundCount++
-			}
 		}
 	}
 
-	assert.Equal(threadCount*2*len(NATtestCases)+1, foundCount, "The number of log entries should be equal.")
+	assert.Equal(threadCount*2*len(NATtestCases), foundCount, "The number of log entries should be equal.")
 	// The TCP messages will not timeout because the server sends the response in sync, while for UDP it waits for the *next* message to arrive before registering a success/timeout.
 	// This message never arrives, because the test client is terminated after the last test case.
 	assert.Equal(threadCount*2, timedOutCount, "The last UDP and TCP messages should be registered as a timeout")
