@@ -14,9 +14,7 @@ USER server
 COPY --from=builder /build /server
 COPY nat_schema.json /server
 COPY at_schema.json /server
-EXPOSE 3051/tcp
-EXPOSE 3050/udp
-EXPOSE 3060/tcp
+EXPOSE 3051 3050/udp 3060
 WORKDIR /server
 CMD ["./server"]
 ARG AWS_BUCKET
