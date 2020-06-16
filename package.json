@@ -71,7 +71,7 @@
     ]
   },
   "dependencies": {
-    "aws-sdk": "^2.683.0",
+    "aws-sdk": "^2.684.0",
     "date-fns": "^2.14.0",
     "e118-iin-list": "^1.4.0",
     "uuid": "^8.1.0"
