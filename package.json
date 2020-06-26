@@ -17,28 +17,28 @@
   },
   "homepage": "https://github.com/NordicSemiconductor/NAT-TestServer#readme",
   "devDependencies": {
-    "@aws-cdk/aws-ec2": "^1.39.0",
-    "@aws-cdk/aws-ecr": "^1.39.0",
-    "@aws-cdk/aws-ecs": "^1.39.0",
-    "@aws-cdk/aws-events-targets": "^1.39.0",
-    "@aws-cdk/aws-iam": "^1.39.0",
-    "@aws-cdk/aws-lambda": "^1.39.0",
-    "@aws-cdk/aws-s3": "^1.39.0",
-    "@aws-cdk/core": "^1.39.0",
-    "@bifravst/cloudformation-helpers": "^3.0.0",
-    "@bifravst/code-style": "^7.1.11",
-    "@bifravst/package-layered-lambdas": "^3.8.13",
-    "@commitlint/cli": "^8.3.5",
-    "@commitlint/config-angular": "^8.3.4",
-    "@types/aws-lambda": "^8.10.51",
-    "@types/node": "^14.0.1",
-    "@types/uuid": "^7.0.3",
-    "aws-cdk": "^1.39.0",
+    "@aws-cdk/aws-ec2": "^1.47.0",
+    "@aws-cdk/aws-ecr": "^1.47.0",
+    "@aws-cdk/aws-ecs": "^1.47.0",
+    "@aws-cdk/aws-events-targets": "^1.47.0",
+    "@aws-cdk/aws-iam": "^1.47.0",
+    "@aws-cdk/aws-lambda": "^1.47.0",
+    "@aws-cdk/aws-s3": "^1.47.0",
+    "@aws-cdk/core": "^1.47.0",
+    "@bifravst/cloudformation-helpers": "^3.0.15",
+    "@bifravst/code-style": "^8.0.3",
+    "@bifravst/package-layered-lambdas": "^3.10.0",
+    "@commitlint/cli": "^9.0.1",
+    "@commitlint/config-angular": "^9.0.1",
+    "@types/aws-lambda": "^8.10.57",
+    "@types/node": "^14.0.14",
+    "@types/uuid": "^8.0.0",
+    "aws-cdk": "^1.47.0",
     "husky": "^4.2.5",
-    "lint-staged": "^10.2.4",
+    "lint-staged": "^10.2.11",
     "prettier": "^2.0.5",
-    "semantic-release": "^17.0.7",
-    "typescript": "^3.9.2"
+    "semantic-release": "^17.1.1",
+    "typescript": "^3.9.5"
   },
   "husky": {
     "hooks": {
@@ -71,9 +71,9 @@
     ]
   },
   "dependencies": {
-    "aws-sdk": "^2.686.0",
+    "aws-sdk": "^2.705.0",
     "date-fns": "^2.14.0",
-    "e118-iin-list": "^1.4.0",
-    "uuid": "^8.1.0"
+    "e118-iin-list": "^1.5.0",
+    "uuid": "^8.2.0"
   }
 }
