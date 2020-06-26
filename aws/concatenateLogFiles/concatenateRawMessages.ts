@@ -5,7 +5,7 @@ import { v4 } from 'uuid'
 import { CollectFilesFn } from './collectFiles'
 import { ConcatenateFilesFn } from './concatenateFiles'
 
-const dateRx = /^raw\/([0-9]{4})\/([0-9]{2})\/([0-9]{2})\/([0-9]{2})/
+const dateRx = /^raw\/NATLog\/(?<year>[0-9]{4})\/(?<month>[0-9]{2})\/(?<day>[0-9]{2})\/(?<hour>[0-9]{2})/
 
 export const concatenateMessages = async ({
 	concat: { raw: concatRaw, days: concatDays, months: concatMonths },
@@ -21,12 +21,12 @@ export const concatenateMessages = async ({
 	// Concatenate hours
 	await concatRaw({
 		files: await collectFilesInBucket({
-			Prefix: `raw/`,
+			Prefix: `raw/NATLog/`,
 			notAfterDate: dateFns.format(new Date(), "yyyy-MM-dd'T'HH"),
 			fileNameToDate: (filename) => {
 				const m = dateRx.exec(filename)
-				if (m) {
-					const [, year, month, day, hour] = m
+				if (m !== null && m.groups !== undefined) {
+					const { year, month, day, hour } = m.groups
 					return `${year}-${month}-${day}T${hour}`
 				}
 				return dateFns.format(new Date(), "yyyy-MM-dd'T'HH") // No date found
