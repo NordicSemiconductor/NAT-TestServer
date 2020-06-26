@@ -29,6 +29,21 @@ server does not receive a new message from the client within 60 seconds after
 having sent the response for the previous message. There is no other way to
 ensure that the connection is intact.
 
+The results are logged to an S3 bucket (on entry per test), and
+[a lambda](aws/concatenateLogFiles/lambda.ts) will collect these log files and
+combine them into larger files (per hour, day, and month) to improve querying
+performance with Athena.
+
+During this process the log entries are enriched with SIM vendor information:
+the ICCID is matched against
+[a list of known vendors](https://github.com/cellprobe/e118-iin-list). If an
+unknown vendor is encountered, the log files will not show up in
+[the report](https://github.com/NordicSemiconductor/NAT-TestReporter). In this
+case the list needs to be updated. Once this is done, log files can be manually
+enriched using:
+
+    node -e 'const { enrich } = require("./dist/enrichSimVendor/cli.js"); enrich();'
+
 ## Testing
 
 Make these environment variable available:
