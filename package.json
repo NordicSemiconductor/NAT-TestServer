@@ -72,7 +72,7 @@
   },
   "dependencies": {
     "aws-sdk": "^2.706.0",
-    "date-fns": "^2.14.0",
+    "date-fns": "^2.15.0",
     "e118-iin-list": "^1.5.0",
     "uuid": "^8.2.0"
   }
